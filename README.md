@@ -9,6 +9,7 @@ Key Features
     Custom Data Factory: Generates "Donut" and "Spiral" datasets with adjustable noise and density.
 
     Polar Feature Engine: Implements a transformation layer that converts (x,y) coordinates into (r,sin(ϕ),cos(ϕ)) for smoother boundary learning.
+    
     Why Polar? By converting $(x, y)$ to $(r, sin(phi), cos(phi)), we linearize circular boundaries, allowing a simpler network to achieve 99%+ accuracy much faster.
 
     Live Visualization: Real-time plotting of the decision boundary and loss convergence during training.
@@ -16,7 +17,9 @@ Key Features
     Modular Architecture: Clean separation between model logic, data processing, and training loops.
 
 
-Project Structure
+### Project Structure
+
+```
 NeuraKitten/
 ├── src/
 │   ├── __init__.py
