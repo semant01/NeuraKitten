@@ -22,17 +22,18 @@ def main() -> None:
 
     np.random.seed(42)
 
-    # 1. Generate fata
+    # 1. Generate the dataset
+    # You can choose between factory.generate_spiral() or factory.generate_donut()
     t_samples = 512
     t_noise = 0.05
     factory = DataFactory(samples=t_samples, noise=t_noise)
-    X_raw, targets = factory.generate_donut()
+    X_raw, targets = factory.generate_spiral(turns=2)
     logging.info(f"Dataset generated: Samples - {t_samples}; noise - {t_noise}")
     logging.info(f"Raw data shape. X_raw: {X_raw.shape}; Targets: {targets.shape}")
 
-    # 2. Featuring
+    # 2. Feature Engineering
     engine = FeatureEngine(
-        use_squares=False, use_interaction=False, use_trig=False, mode="cartesian"
+        use_squares=True, use_interaction=True, use_trig=True, mode="cartesian"
     )
     logging.info(f"Mode: {engine.mode}")
     if engine.mode == "cartesian":
@@ -45,6 +46,7 @@ def main() -> None:
     X_featured = engine.transform(X_raw)
 
     # 3. Scaling
+    # Normalizes data to [-1, 1] range, essential for neural network convergence
     logging.info("Scaling...")
     scaler = DataScaler(feature_range=(-1, 1))
     X_transformed = scaler.fit_transform(X_featured)
@@ -53,7 +55,9 @@ def main() -> None:
         f"X_transformed Range: [{X_transformed.min():.2f}, {X_transformed.max():.2f}]"
     )
 
-    # Create Neural Network
+    # 4. Initialize the MLP
+    # Define architecture: [Input Nodes, Hidden Layers..., Output Nodes]
+    # Input nodes are calculated automatically based on your features
     input_dim = X_transformed.shape[1]
     output_dim = targets.shape[1]
     hidden_layers = [12, 12]
@@ -63,6 +67,7 @@ def main() -> None:
 
     brain = DeepNeuralNetwork([input_dim] + hidden_layers + [output_dim])
 
+    # 5. Run Training & Visualization
     fit(
         model=brain,
         engine=engine,
@@ -70,14 +75,14 @@ def main() -> None:
         targets=targets,
         scaler=scaler,
         X_raw=X_raw,
-        epochs=20001,
-        batch_size=128,
-        base_lr=0.03,
-        lr_gradient=0.9998,
-        visualize=True,
-        color_gradient=False,
-        show_dataset_points=True,
-        show_levels=False,
+        epochs=10001,  # Total training iterations
+        batch_size=128,  # Number of samples per gradient update
+        base_lr=0.01,  # Initial learning rate
+        lr_gradient=0.9998,  # Smooth learning rate decay
+        visualize=True,  # Toggle real-time Matplotlib animation
+        color_gradient=False,  # Use solid colors or probability gradients
+        show_dataset_points=True,  # Show/hide original data points
+        show_levels=False,  # Toggle decision boundary contours
     )
 
 
