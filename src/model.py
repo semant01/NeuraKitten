@@ -13,6 +13,11 @@ class DeepNeuralNetwork:
         self.weights = []
         self.biases = []
 
+        self.beta1 = 0.9
+        self.beta2 = 0.999
+        self.epsilon = 1e-8
+        self.t = 0
+
         # He Initialization: optimized for layers using ReLU/Leaky ReLU
         for i in range(len(layers_size) - 1):
             n_in = layers_size[i]  # nodes at this layer
@@ -26,6 +31,11 @@ class DeepNeuralNetwork:
             # Biases: initialized to zero to ensure neutral starting state
             b = np.zeros((n_out, 1))
             self.biases.append(b)
+
+        self.m_w = [np.zeros_like(w) for w in self.weights]
+        self.v_w = [np.zeros_like(w) for w in self.weights]
+        self.m_b = [np.zeros_like(b) for b in self.biases]
+        self.v_b = [np.zeros_like(b) for b in self.biases]
 
     def sigmoid(self, x: np.ndarray) -> np.ndarray:
         """Return result of sigmoid function."""
@@ -68,6 +78,8 @@ class DeepNeuralNetwork:
         targets = np.array(targets_list, ndmin=2).T
         batch_size = inputs.shape[1]
 
+        self.t += 1
+
         # 1. Forward propagation
         zs = []
         activations = [inputs]
@@ -84,7 +96,7 @@ class DeepNeuralNetwork:
             activations.append(a)
 
         # 2. Error and Loss calculation (MSE - Mean Squared Error)
-        errors = targets - activations[-1]
+        errors = activations[-1] - targets
         loss = np.mean(np.square(errors))
 
         # 3. Backward propagation
@@ -96,11 +108,29 @@ class DeepNeuralNetwork:
                 # Hidden layer delta (Leaky ReLU)
                 delta = errors * self.leaky_relu_deriv(zs[i])
 
-            # Gradient Descent update
-            self.weights[i] += (lr / batch_size) * np.dot(delta, activations[i].T)
-            self.biases[i] += (lr / batch_size) * np.sum(delta, axis=1, keepdims=True)
-
             # Recalculate error for the previous layer
-            errors = np.dot(self.weights[i].T, delta)
+            if i > 0:
+                errors = np.dot(self.weights[i].T, delta)
+
+            grad_w = np.dot(delta, activations[i].T) / batch_size
+            grad_b = np.sum(delta, axis=1, keepdims=True) / batch_size
+
+            # Weights moments
+            self.m_w[i] = self.beta1 * self.m_w[i] + (1 - self.beta1) * grad_w
+            self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grad_w**2)
+
+            # Biases moments
+            self.m_b[i] = self.beta1 * self.m_b[i] + (1 - self.beta1) * grad_b
+            self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grad_b**2)
+
+            # Bias correction
+            m_hat = self.m_w[i] / (1 - self.beta1**self.t)
+            v_hat = self.v_w[i] / (1 - self.beta2**self.t)
+            m_b_hat = self.m_b[i] / (1 - self.beta1**self.t)
+            v_b_hat = self.v_b[i] / (1 - self.beta2**self.t)
+
+            # Apply updates
+            self.weights[i] -= lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
+            self.biases[i] -= lr * m_b_hat / (np.sqrt(v_b_hat) + self.epsilon)
 
         return float(loss)

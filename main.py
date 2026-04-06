@@ -20,20 +20,22 @@ def main() -> None:
     """Run the main entry point of the script."""
     logging.info("Main entry point of the script")
 
+    # Standard reproducibility anchor and the Answer to the Ultimate Question of Life.
     np.random.seed(42)
 
     # 1. Generate the dataset
-    # You can choose between factory.generate_spiral() or factory.generate_donut()
-    t_samples = 512
+    # You can choose between factory.generate_spiral(turns=5) or
+    # factory.generate_donut(inner=0.3, outer=0.7, evenly=False)
+    t_samples = np.pow(2, 11)
     t_noise = 0.05
     factory = DataFactory(samples=t_samples, noise=t_noise)
-    X_raw, targets = factory.generate_spiral(turns=2)
+    X_raw, targets = factory.generate_donut(inner=0.3, outer=0.7, evenly=True)
     logging.info(f"Dataset generated: Samples - {t_samples}; noise - {t_noise}")
     logging.info(f"Raw data shape. X_raw: {X_raw.shape}; Targets: {targets.shape}")
 
     # 2. Feature Engineering
     engine = FeatureEngine(
-        use_squares=True, use_interaction=True, use_trig=True, mode="cartesian"
+        use_squares=False, use_interaction=False, use_trig=False, mode="polar"
     )
     logging.info(f"Mode: {engine.mode}")
     if engine.mode == "cartesian":
@@ -60,7 +62,7 @@ def main() -> None:
     # Input nodes are calculated automatically based on your features
     input_dim = X_transformed.shape[1]
     output_dim = targets.shape[1]
-    hidden_layers = [12, 12]
+    hidden_layers = [3]
     logging.info(
         f"Create Neural Network: [{input_dim}] --> {hidden_layers} --> [{output_dim}]"
     )
@@ -75,14 +77,15 @@ def main() -> None:
         targets=targets,
         scaler=scaler,
         X_raw=X_raw,
-        epochs=10001,  # Total training iterations
-        batch_size=128,  # Number of samples per gradient update
-        base_lr=0.01,  # Initial learning rate
-        lr_gradient=0.9998,  # Smooth learning rate decay
+        epochs=1001,  # Total training iterations
+        batch_size=64,  # Number of samples per gradient update
+        initial_lr=0.001,  # Initial learning rate
+        decay_rate=0.01,  # Smooth learning rate decay
         visualize=True,  # Toggle real-time Matplotlib animation
+        view_range=1.5,  # Visible area [-view_range; +view_range]
         color_gradient=False,  # Use solid colors or probability gradients
         show_dataset_points=True,  # Show/hide original data points
-        show_levels=False,  # Toggle decision boundary contours
+        show_levels=True,  # Toggle decision boundary contours
     )
 
 

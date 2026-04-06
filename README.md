@@ -6,12 +6,19 @@ This project demonstrates how a simple neural network can classify complex non-l
 ![Neural Network Decision Boundary Animation](demo.png)
 
 ## Key Features
-* **Custom Data Factory**: Generates synthetic "Donut" and "Spiral" datasets with adjustable noise and density.
-* **Feature Engineering Engine**: Implements transformations including Polar coordinates $(r, \phi)$, polynomial features $(x^2, y^2, x \cdot y)$, and trigonometric expansions.
-* **Why Polar?** By linearizing circular boundaries, we allow a simpler network to achieve 99%+ accuracy significantly faster than using raw $(x, y)$ data.
-* **Live Visualization**: Real-time plotting of decision boundaries and loss convergence during the training process.
-* **Modular Architecture**: Clean separation between model logic, data processing, and training loops.
+- **Custom Data Factory**: Generates synthetic "Donut" and "Spiral" datasets with adjustable noise and density.
+- **Feature Engineering Engine**: Implements transformations including Polar coordinates $(r, sin(\phi), cos(\phi))$, polynomial features $(x^2, y^2, x \cdot y)$, and trigonometric expansions.
+- **Why Polar?** By linearizing circular boundaries, we allow a simpler network to achieve 99%+ accuracy significantly faster than using raw $(x, y)$ data.
+- **Live Visualization**: Real-time plotting of decision boundaries and loss convergence during the training process.
+- **Modular Architecture**: Clean separation between model logic, data processing, and training loops.
+- **Advanced Optimization**: Implements the ADAM (Adaptive Moment Estimation) optimizer with bias correction for faster and more stable convergence.
+- **Comprehensive Versioning**: Detailed project evolution tracked in CHANGELOG.md following SemVer standards.
 
+## Mathematical Foundations
+- **Optimization**: ADAM (Adaptive Moment Estimation) with time-based learning rate decay.  
+- **Initialization**: He Initialization for stable variance in deep networks.  
+- **Activation**: Leaky ReLU for hidden layers and Sigmoid for the output layer.  
+- **Loss Function**: Mean Squared Error (MSE).  
 
 ## Project Structure
 ```text
@@ -23,6 +30,7 @@ NeuraKitten/
 │   └── visualization.py    # Live plotting with Matplotlib
 ├── main.py                 # Entry point
 ├── requirements.txt        # Project dependencies
+├── CHANGELOG.md            # Revision history
 └── README.md               # Documentation
 ```
 
@@ -67,7 +75,8 @@ def main():
     np.random.seed(42)
 
     # 1. Generate the dataset
-    # You can choose between factory.generate_spiral() or factory.generate_donut()
+    # You can choose between factory.generate_spiral(turns=5) or
+    # factory.generate_donut(inner=0.3, outer=0.7, evenly=False)
     factory = DataFactory(samples=512, noise=0.05)
     X_raw, targets = factory.generate_spiral(turns=2.5)
 
@@ -99,13 +108,15 @@ def main():
         targets=targets,
         scaler=scaler,
         X_raw=X_raw,
-        epochs=20001,  # Total training iterations
-        batch_size=128,  # Number of samples per gradient update
-        base_lr=0.03,  # Initial learning rate
-        lr_gradient=0.9998,  # Smooth learning rate decay
+        epochs=501,  # Total training iterations
+        batch_size=64,  # Number of samples per gradient update
+        initial_lr=0.001,  # Initial learning rate
+        decay_rate=0.01,  # Smooth learning rate decay
         visualize=True,  # Toggle real-time Matplotlib animation
+        view_range=1.5,  # Visible area [-view_range; +view_range]
         color_gradient=False,  # Use solid colors or probability gradients
         show_dataset_points=True,  # Show/hide original data points
+        show_levels=True,  # Toggle decision boundary contours
     )
 ```
 

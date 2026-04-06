@@ -22,6 +22,7 @@ def live_plot(
     LR: float,
     loss: float,
     ax: Axes,
+    view_range: float,
     color_gradient: bool = False,
     show_dataset_points: bool = False,
     show_levels: bool = False,
@@ -38,13 +39,14 @@ def live_plot(
         LR: Current learning rate.
         loss: Current loss value.
         ax: Matplotlib axes object to draw on.
+        view_range: Visualization plot area [-view_range; +view_range]
         color_gradient: Whether to show smooth probability gradients.
         show_dataset_points: Whether to overlay data points on the plot.
         show_levels: Whether to draw contour lines.
 
     """
     ax.clear()  # Clear previous frame
-    view_range = 1.5
+    view_range = view_range
     res = 100  # grid-map resolution
 
     # 1.Create grid cells
@@ -87,7 +89,7 @@ def live_plot(
     ax.set_xlim(-view_range, view_range)
     ax.set_ylim(-view_range, view_range)
 
-    ax.set_title(f"Epoch: {epoch} | Loss: {loss:.6f} | LR: {LR:.4f}")
+    ax.set_title(f"Epoch: {epoch} | Loss: {loss:.6f} | LR: {LR:.6f}")
     ax.set_aspect("equal")
 
     # Update frames

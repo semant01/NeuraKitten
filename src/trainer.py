@@ -25,9 +25,10 @@ def fit(
     X_raw: np.ndarray,
     epochs: int = 5001,
     batch_size: int = 256,
-    base_lr: float = 0.01,
-    lr_gradient: float = 0.9998,
+    initial_lr: float = 0.01,
+    decay_rate: float = 0.9998,
     visualize: bool = True,
+    view_range: float = 1.5,
     color_gradient: bool = False,
     show_dataset_points: bool = False,
     show_levels: bool = False,
@@ -54,10 +55,9 @@ def fit(
     indices = np.arange(len(inputs))
     history_loss = []
 
-    # Smart LR adjusting, baseline batch size is assumed 32
-    initial_lr = base_lr * (batch_size / 32)
-    lr = initial_lr
-    lr_grad = lr_gradient
+    # LR adjusting
+    initial_lr = initial_lr
+    decay_rate = decay_rate
 
     for epoch in range(epochs):
         if visualize and state["stop"]:
@@ -69,8 +69,8 @@ def fit(
                 break
 
         # LR Decay
-        lr = initial_lr * (lr_grad**epoch)
-        lr = max(lr, 0.0001)
+        lr = initial_lr / (1 + decay_rate * epoch)
+        lr = max(lr, 1e-6)
 
         epoch_losses = []
 
@@ -86,7 +86,7 @@ def fit(
 
         # Log reporting
         if epoch % 1000 == 0:
-            logging.info(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.4f}")
+            logging.info(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.6f}")
 
         # Visual plot
         if visualize and epoch % 10 == 0:
@@ -100,6 +100,7 @@ def fit(
                 lr,
                 current_loss,
                 ax,
+                view_range,
                 color_gradient,
                 show_dataset_points,
                 show_levels,

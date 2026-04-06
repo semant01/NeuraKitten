@@ -48,7 +48,6 @@ class FeatureEngine:
 
         elif self.mode == "polar":
             # polar coordinates use radius and Sin and Cos for smooth approximation
-            # (instead of phi calculated with ATAN which would give a step at -Pi to Pi)
             r = np.sqrt(x1**2 + x2**2)
             phi = np.arctan2(x2, x1)
             sn = np.sin(phi)
@@ -94,12 +93,21 @@ class DataFactory:
 
         return self._shuffle_and_return(np.vstack([x1, x2]), np.vstack([y1, y2]))
 
-    def generate_donut(self, inner: float = 0.3, outer: float = 0.7) -> tuple:
-        """Generate Points inside the ring and outside/inside the hole (0)."""
+    def generate_donut(
+        self, inner: float = 0.3, outer: float = 0.7, evenly: bool = False
+    ) -> tuple:
+        """Generate Points inside the ring and outside/inside the hole (0).
+
+        Points can be distributed evenly along the radius, or closer to the center.
+        """
         max_radius = outer + (outer - inner)
         u = np.random.uniform(0, 1, (self.samples, 1))
 
-        rho = np.sqrt(u) * max_radius
+        if evenly:
+            rho = np.sqrt(u) * max_radius
+        else:
+            rho = u * max_radius
+
         phi = np.random.uniform(0, 2 * np.pi, (self.samples, 1))
 
         x_col = rho * np.cos(phi)
