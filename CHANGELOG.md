@@ -4,6 +4,16 @@ All notable changes to the "NeuraKitten" project will be documented in this file
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.2.0] - 2026-04-08
+
+### Added
+- Added option Rose (Rhodonea curve) for generating datasets. 
+- Added `src/config.py` with `NeuraConfig` dataclass supporting parameters for Network architecture, Hyperparameters, ADAM, Generating data, Feature Engineering and UI/UX.
+
+### Fixed
+- Cleaned up all classes to adapt a single `config.py` architectre.
+
+
 ## [1.1.0] - 2026-04-06
 ### Added
 - Functional **ADAM Optimizer** with bias correction.

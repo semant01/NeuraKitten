@@ -1,5 +1,7 @@
 import numpy as np
 
+from src.config import NeuraConfig
+
 
 class DeepNeuralNetwork:
     """A flexible Deep Neural Network implementation from scratch using NumPy.
@@ -7,15 +9,20 @@ class DeepNeuralNetwork:
     Supports arbitrary hidden layer architectures and vectorized batch training.
     """
 
-    def __init__(self, layers_size: list) -> None:
+    def __init__(self, config: NeuraConfig, layers_size: list) -> None:
         """Initiate parameters for the Neuaral Network."""
+        self.cfg = config
+
+        # Reproducibility anchor.
+        self.rng = np.random.default_rng(seed=self.cfg.seed)
+
         self.layers_size = layers_size
         self.weights = []
         self.biases = []
 
-        self.beta1 = 0.9
-        self.beta2 = 0.999
-        self.epsilon = 1e-8
+        self.beta1 = self.cfg.beta1
+        self.beta2 = self.cfg.beta2
+        self.epsilon = self.cfg.epsilon
         self.t = 0
 
         # He Initialization: optimized for layers using ReLU/Leaky ReLU
@@ -25,7 +32,7 @@ class DeepNeuralNetwork:
 
             # Weights: normal distribution with variance scaled by input size
             std = np.sqrt(2.0 / n_in)
-            w = np.random.normal(0.0, std, (n_out, n_in))
+            w = self.rng.normal(0.0, std, (n_out, n_in))
             self.weights.append(w)
 
             # Biases: initialized to zero to ensure neutral starting state

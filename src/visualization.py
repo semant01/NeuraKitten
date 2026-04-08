@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 
+from src.config import NeuraConfig
+
 if TYPE_CHECKING:
     from .data_utils import DataScaler, FeatureEngine
     from .model import DeepNeuralNetwork
@@ -14,39 +16,33 @@ if TYPE_CHECKING:
 
 def live_plot(
     brain: "DeepNeuralNetwork",
+    cfg: NeuraConfig,
     engine: "FeatureEngine",
     scaler: "DataScaler",
     X_raw: np.ndarray,
     targets: np.ndarray,
     epoch: int,
-    LR: float,
-    loss: float,
+    lr: float,
+    current_loss: float,
     ax: Axes,
-    view_range: float,
-    color_gradient: bool = False,
-    show_dataset_points: bool = False,
-    show_levels: bool = False,
 ) -> None:
     """Update the live visualization of the neural network's decision boundary.
 
     Args:
         brain: The neural network model instance.
+        cfg: Configuration dataset
         engine: Feature engineering engine for data transformation.
         scaler: Scaler used for data normalization.
         X_raw: Original input features (Cartesian).
         targets: Labels for the dataset.
         epoch: Current training epoch.
-        LR: Current learning rate.
-        loss: Current loss value.
+        lr: Current learning rate.
+        current_loss: Current loss value.
         ax: Matplotlib axes object to draw on.
-        view_range: Visualization plot area [-view_range; +view_range]
-        color_gradient: Whether to show smooth probability gradients.
-        show_dataset_points: Whether to overlay data points on the plot.
-        show_levels: Whether to draw contour lines.
 
     """
     ax.clear()  # Clear previous frame
-    view_range = view_range
+    view_range = cfg.view_range
     res = 100  # grid-map resolution
 
     # 1.Create grid cells
@@ -65,15 +61,15 @@ def live_plot(
     zz = brain.predict(scaled_grid).reshape(xx.shape)
 
     # 3. Plot gradient map
-    if color_gradient:
+    if cfg.color_gradient:
         ax.contourf(xx, yy, zz, 256, cmap="YlOrRd", alpha=0.8)
     else:
         ax.contourf(xx, yy, zz, levels=[0.0, 0.5, 1.0], colors=["white", "#7f7deb"])
 
-    if show_levels:
+    if cfg.show_levels:
         ax.contour(xx, yy, zz, levels=10, colors="black", linewidths=0.2, alpha=0.9)
 
-    if show_dataset_points:
+    if cfg.show_dataset_points:
         if X_raw is not None:
             ax.scatter(
                 X_raw[:, 0],
@@ -89,7 +85,7 @@ def live_plot(
     ax.set_xlim(-view_range, view_range)
     ax.set_ylim(-view_range, view_range)
 
-    ax.set_title(f"Epoch: {epoch} | Loss: {loss:.6f} | LR: {LR:.6f}")
+    ax.set_title(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.6f}")
     ax.set_aspect("equal")
 
     # Update frames

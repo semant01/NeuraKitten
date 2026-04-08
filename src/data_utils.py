@@ -1,5 +1,7 @@
 import numpy as np
 
+from src.config import NeuraConfig
+
 
 class FeatureEngine:
     """Transform input data.
@@ -8,37 +10,32 @@ class FeatureEngine:
     [r, phi] - polar
     """
 
-    def __init__(
-        self,
-        use_squares: bool = False,  # cartesian only
-        use_interaction: bool = False,  # cartesian only
-        use_trig: bool = False,  # cartesian only
-        mode: str = "cartesian",  # polar
-    ) -> None:
+    def __init__(self, cfg: NeuraConfig) -> None:
         """Initiate parameters for the Feature Engine class."""
-        # 'cartesian' -> [x, y]
-        # 'polar'     -> [r_norm, phi_norm]
-        self.use_squares = use_squares
-        self.use_interaction = use_interaction
-        self.use_trig = use_trig
-        self.mode = mode
+        self.cfg = cfg
 
     def transform(self, X_raw: np.ndarray) -> np.ndarray:
         """Transfor X_raw data and return modified data."""
+        feature_mode = self.cfg.feature_mode
+
+        use_squares = self.cfg.use_squares
+        use_interaction = self.cfg.use_interaction
+        use_trig = self.cfg.use_trig
+
         x1 = X_raw[:, 0:1]
         x2 = X_raw[:, 1:2]
 
-        if self.mode == "cartesian":
+        if feature_mode == "cartesian":
             features = [X_raw]
 
-            if self.use_squares:
+            if use_squares:
                 features.append(x1**2)
                 features.append(x2**2)
 
-            if self.use_interaction:
+            if use_interaction:
                 features.append(x1 * x2)
 
-            if self.use_trig:
+            if use_trig:
                 features.append(np.sin(x1))
                 features.append(np.cos(x1))
                 features.append(np.sin(x2))
@@ -46,7 +43,7 @@ class FeatureEngine:
 
             return np.hstack(features)
 
-        elif self.mode == "polar":
+        elif feature_mode == "polar":
             # polar coordinates use radius and Sin and Cos for smooth approximation
             r = np.sqrt(x1**2 + x2**2)
             phi = np.arctan2(x2, x1)
@@ -56,24 +53,37 @@ class FeatureEngine:
             return np.hstack([r, sn, cs])
 
         else:
-            raise ValueError("Unknown mode")
+            raise ValueError("Unknown Feature Mode")
 
 
 class DataFactory:
     """Generate input data with parameters."""
 
-    def __init__(
-        self, samples: int = 2000, noise: float = 0.05, seed: None = None
-    ) -> None:
+    def __init__(self, cfg: NeuraConfig) -> None:
         """Initiate parameters for the DataFactory class."""
-        self.samples = samples
-        self.noise = noise
-        if seed is not None:
-            np.random.seed(seed)
+        self.cfg = cfg
 
-    def generate_spiral(self, turns: float = 2.5) -> tuple:
+        # Reproducibility anchor.
+        self.rng = np.random.default_rng(seed=self.cfg.seed)
+
+    def generate(self) -> tuple:
+        """Generate dataset by choosing a mode."""
+        mode = self.cfg.data_mode.lower()
+
+        if mode == "donut":
+            return self.generate_donut()
+        elif mode == "spiral":
+            return self.generate_spiral()
+        elif mode == "rhodonea":
+            return self.generate_rhodonea()
+        else:
+            raise ValueError(f"Unknown Data Mode: {mode}")
+
+    def generate_spiral(self) -> tuple:
         """Generate dataset for two intertwined spirals."""
-        n = self.samples // 2
+        n = self.cfg.samples // 2
+        noise = self.cfg.noise
+        turns = self.cfg.spiral_turns
 
         # The parameter *t* determines the radius and the angle simultaneously.
         t = np.linspace(0, 1, n)
@@ -82,64 +92,101 @@ class DataFactory:
         # Spiral 1 (Class 0)
         r1 = t * 1.0
         x1 = np.c_[r1 * np.cos(theta), r1 * np.sin(theta)]
-        x1 += np.random.normal(0, self.noise, x1.shape)
+        x1 += self.rng.normal(0, noise, x1.shape)
         y1 = np.zeros((n, 1))
 
         # Spiral 2 (Class 1) — Rotated 180 degrees
         r2 = t * 1.0
         x2 = np.c_[-r2 * np.cos(theta), -r2 * np.sin(theta)]
-        x2 += np.random.normal(0, self.noise, x2.shape)
+        x2 += self.rng.normal(0, noise, x2.shape)
         y2 = np.ones((n, 1))
 
         return self._shuffle_and_return(np.vstack([x1, x2]), np.vstack([y1, y2]))
 
-    def generate_donut(
-        self, inner: float = 0.3, outer: float = 0.7, evenly: bool = False
-    ) -> tuple:
+    def generate_donut(self) -> tuple:
         """Generate Points inside the ring and outside/inside the hole (0).
 
         Points can be distributed evenly along the radius, or closer to the center.
         """
-        max_radius = outer + (outer - inner)
-        u = np.random.uniform(0, 1, (self.samples, 1))
+        samples = self.cfg.samples
+        noise = self.cfg.noise
+        inner = self.cfg.donut_r_inner
+        outer = self.cfg.donut_r_outer
+        evenly_dist = self.cfg.donut_r_evenly_dist
 
-        if evenly:
+        max_radius = outer + (outer - inner)
+        u = self.rng.uniform(0, 1, (samples, 1))
+
+        if evenly_dist:
             rho = np.sqrt(u) * max_radius
         else:
             rho = u * max_radius
 
-        phi = np.random.uniform(0, 2 * np.pi, (self.samples, 1))
+        phi = self.rng.uniform(0, 2 * np.pi, (samples, 1))
 
         x_col = rho * np.cos(phi)
         y_col = rho * np.sin(phi)
         X = np.hstack([x_col, y_col])
 
         y = np.logical_and(rho >= inner, rho <= outer).astype(float).reshape(-1, 1)
-        if self.noise > 0:
-            X += np.random.normal(0, self.noise, X.shape)
+        if noise > 0:
+            X += self.rng.normal(0, noise, X.shape)
+
+        return X, y
+
+    def generate_rhodonea(self) -> tuple:
+        """Generate Points inside a Rose (Rhodonea curve).
+
+        a - maximum radius
+        k - number of petals (2k petals will be generated)
+
+        """
+        a = self.cfg.rose_a
+        k = self.cfg.rose_k
+        samples = self.cfg.samples
+        noise = self.cfg.noise
+
+        max_radius = a * 1.3
+
+        u = self.rng.uniform(0, 1, (samples, 1))
+        rho = np.sqrt(u) * max_radius
+        phi = self.rng.uniform(0, 2 * np.pi, (samples, 1))
+
+        x_col = rho * np.cos(phi)
+        y_col = rho * np.sin(phi)
+        X = np.hstack([x_col, y_col])
+
+        boundary_r = np.abs(a * np.cos(k * phi))
+        y = (rho <= boundary_r).astype(float).reshape(-1, 1)
+
+        if noise > 0:
+            X += self.rng.normal(0, noise, X.shape)
 
         return X, y
 
     def generate_xor(self) -> tuple:
         """Generate classic XOR: different coordinate signs."""
-        X = np.random.uniform(-1, 1, (self.samples, 2))
+        samples = self.cfg.samples
+        X = self.rng.uniform(-1, 1, (samples, 2))
         y = (X[:, 0] * X[:, 1] > 0).astype(float).reshape(-1, 1)
         return X, y
 
     def _shuffle_and_return(self, X: np.ndarray, y: np.ndarray) -> tuple:
         """Shuffle data. Support method."""
-        indices = np.random.permutation(len(X))
+        indices = self.rng.permutation(len(X))
         return X[indices], y[indices]
 
 
 class DataScaler:
     """Scale data using Min-Max to fit into (-1;1) range."""
 
-    def __init__(self, feature_range: tuple = (-1, 1)) -> None:
+    def __init__(self, cfg: NeuraConfig) -> None:
         """Initiate parameters for the DataScaler class."""
+        self.cfg = cfg
+        self.range = self.cfg.feature_range
+
         self.min_ = None
         self.max_ = None
-        self.range = feature_range
 
     def fit(self, X: np.ndarray) -> None:
         """Memorize scale parameters for data X when scaling to min-max range."""

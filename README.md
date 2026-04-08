@@ -6,7 +6,7 @@ This project demonstrates how a simple neural network can classify complex non-l
 ![Neural Network Decision Boundary Animation](demo.png)
 
 ## Key Features
-- **Custom Data Factory**: Generates synthetic "Donut" and "Spiral" datasets with adjustable noise and density.
+- **Custom Data Factory**: Generates synthetic "Donut", "Spiral" or "Rhodonea curve" datasets with adjustable noise and density.
 - **Feature Engineering Engine**: Implements transformations including Polar coordinates $(r, sin(\phi), cos(\phi))$, polynomial features $(x^2, y^2, x \cdot y)$, and trigonometric expansions.
 - **Why Polar?** By linearizing circular boundaries, we allow a simpler network to achieve 99%+ accuracy significantly faster than using raw $(x, y)$ data.
 - **Live Visualization**: Real-time plotting of decision boundaries and loss convergence during the training process.
@@ -24,6 +24,7 @@ This project demonstrates how a simple neural network can classify complex non-l
 ```text
 NeuraKitten/
 ├── src/
+│   ├── config.py           # Configuration parameters for Network architecture, Hyperparameters, etc.
 │   ├── data_utils.py       # DataFactory, FeatureEngine, DataScaler
 │   ├── model.py            # DeepNeuralNetwork class
 │   ├── trainer.py          # Training loop logic
@@ -61,62 +62,66 @@ python main.py
 ```
 
 ### Configuration.
-You can customize the training behavior in `main.py`:
+You can customize the entire pipeline from data geometry to neural architecture using the `NeuraConfig` dataclass.
+
 
 ```
 import numpy as np
 
+from src.config import NeuraConfig
 from src.data_utils import DataFactory, DataScaler, FeatureEngine
 from src.model import DeepNeuralNetwork
 from src.trainer import fit
 
 
-def main():
-    np.random.seed(42)
+def main() -> None:
+    """Run the main entry point of the script."""
 
-    # 1. Generate the dataset
-    # You can choose between factory.generate_spiral(turns=5) or
-    # factory.generate_donut(inner=0.3, outer=0.7, evenly=False)
-    factory = DataFactory(samples=512, noise=0.05)
-    X_raw, targets = factory.generate_spiral(turns=2.5)
-
-    # 2. Feature Engineering
-    # Experiment with "polar" mode or add squares/trig features in "cartesian" mode
-    engine = FeatureEngine(
-        mode="cartesian", use_squares=False, use_interaction=False, use_trig=False
+    cfg = NeuraConfig(
+        hidden_layers=[16, 16],
+        samples=2048,
+        batch_size=16,
+        data_mode="rhodonea",  # "donut", "spiral", "rhodonea"
+        rose_k=2.5,
+        noise=0.03,
+        feature_mode="polar",
+        color_gradient=False,
+        show_levels=True,
+        show_dataset_points=True,
     )
+
+    # 1. Generate the dataset based on cfg.data_mode
+    factory = DataFactory(cfg)
+    X_raw, targets = factory.generate()
+
+    # 2. Feature Engineering, transform coordinates (e.g., Cartesian to Polar)
+    engine = FeatureEngine(cfg)
     X_featured = engine.transform(X_raw)
 
     # 3. Scaling
-    # Normalizes data to [-1, 1] range, essential for neural network convergence
-    scaler = DataScaler(feature_range=(-1, 1))
+    # Normalizes data to [-1, 1] range
+    scaler = DataScaler(cfg)
     X_transformed = scaler.fit_transform(X_featured)
 
     # 4. Initialize the MLP
-    # Define architecture: [Input Nodes, Hidden Layers..., Output Nodes]
-    # Input nodes are calculated automatically based on your features
+    # Dimensions are detected automatically from the processed features
     input_dim = X_transformed.shape[1]
     output_dim = targets.shape[1]
-    hidden_layers = [12, 12]
-    brain = DeepNeuralNetwork([input_dim] + hidden_layers + [output_dim])
+    hidden_layers = cfg.hidden_layers
+
+    brain = DeepNeuralNetwork(
+        config=cfg, layers_size=[input_dim] + hidden_layers + [output_dim]
+    )
 
     # 5. Run Training & Visualization
     fit(
         model=brain,
-        engine=engine,
         inputs=X_transformed,
         targets=targets,
-        scaler=scaler,
-        X_raw=X_raw,
-        epochs=501,  # Total training iterations
-        batch_size=64,  # Number of samples per gradient update
-        initial_lr=0.001,  # Initial learning rate
-        decay_rate=0.01,  # Smooth learning rate decay
-        visualize=True,  # Toggle real-time Matplotlib animation
-        view_range=1.5,  # Visible area [-view_range; +view_range]
-        color_gradient=False,  # Use solid colors or probability gradients
-        show_dataset_points=True,  # Show/hide original data points
-        show_levels=True,  # Toggle decision boundary contours
+        cfg=cfg,
+        X_raw=X_raw,  # Original points for plotting
+        scaler=scaler,  # Required to de-scale boundaries
+        engine=engine,  # Required to re-feature decision grid
     )
 ```
 

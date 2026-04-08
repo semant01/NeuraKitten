@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import Event, KeyEvent
 
+from src.config import NeuraConfig
+
 from .visualization import live_plot
 
 if TYPE_CHECKING:
@@ -18,23 +20,17 @@ if TYPE_CHECKING:
 
 def fit(
     model: "DeepNeuralNetwork",
-    engine: "FeatureEngine",
     inputs: np.ndarray,
     targets: np.ndarray,
-    scaler: "DataScaler",
+    cfg: NeuraConfig,
     X_raw: np.ndarray,
-    epochs: int = 5001,
-    batch_size: int = 256,
-    initial_lr: float = 0.01,
-    decay_rate: float = 0.9998,
-    visualize: bool = True,
-    view_range: float = 1.5,
-    color_gradient: bool = False,
-    show_dataset_points: bool = False,
-    show_levels: bool = False,
+    scaler: "DataScaler",
+    engine: "FeatureEngine",
 ) -> "DeepNeuralNetwork":
     """Train Deep Neural Network."""
-    if visualize:
+    # Reproducibility anchor.
+    rng = np.random.default_rng(seed=cfg.seed)
+    if cfg.visualize:
         plt.ion()
         fig, ax = plt.subplots(figsize=(6, 6))
         state = {"paused": False, "stop": False}
@@ -56,28 +52,28 @@ def fit(
     history_loss = []
 
     # LR adjusting
-    initial_lr = initial_lr
-    decay_rate = decay_rate
+    initial_lr = cfg.initial_lr
+    decay_rate = cfg.decay_rate
 
-    for epoch in range(epochs):
-        if visualize and state["stop"]:
+    for epoch in range(cfg.epochs):
+        if cfg.visualize and state["stop"]:
             break
 
-        while visualize and state["paused"]:
+        while cfg.visualize and state["paused"]:
             plt.pause(0.1)
             if state["stop"]:
                 break
 
         # LR Decay
         lr = initial_lr / (1 + decay_rate * epoch)
-        lr = max(lr, 1e-6)
+        lr = max(lr, cfg.min_lr)
 
         epoch_losses = []
 
-        np.random.shuffle(indices)
+        rng.shuffle(indices)
 
-        for start_idx in range(0, len(indices), batch_size):
-            batch_indices = indices[start_idx : start_idx + batch_size]
+        for start_idx in range(0, len(indices), cfg.batch_size):
+            batch_indices = indices[start_idx : start_idx + cfg.batch_size]
             batch_loss = model.train(inputs[batch_indices], targets[batch_indices], lr)
             epoch_losses.append(batch_loss)
 
@@ -85,28 +81,25 @@ def fit(
         history_loss.append(current_loss)
 
         # Log reporting
-        if epoch % 1000 == 0:
+        if epoch % cfg.frame_log == 0:
             logging.info(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.6f}")
 
         # Visual plot
-        if visualize and epoch % 10 == 0:
+        if cfg.visualize and epoch % cfg.frame_skip == 0:
             live_plot(
-                model,
-                engine,
-                scaler,
-                X_raw,
-                targets,
-                epoch,
-                lr,
-                current_loss,
-                ax,
-                view_range,
-                color_gradient,
-                show_dataset_points,
-                show_levels,
+                brain=model,
+                cfg=cfg,
+                engine=engine,
+                scaler=scaler,
+                X_raw=X_raw,
+                targets=targets,
+                epoch=epoch,
+                lr=lr,
+                current_loss=current_loss,
+                ax=ax,
             )
 
-    if visualize:
+    if cfg.visualize:
         plt.ioff()
         plt.show()
 

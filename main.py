@@ -2,8 +2,7 @@ import logging
 import os
 import subprocess
 
-import numpy as np
-
+from src.config import NeuraConfig
 from src.data_utils import DataFactory, DataScaler, FeatureEngine
 from src.model import DeepNeuralNetwork
 from src.trainer import fit
@@ -20,72 +19,55 @@ def main() -> None:
     """Run the main entry point of the script."""
     logging.info("Main entry point of the script")
 
-    # Standard reproducibility anchor and the Answer to the Ultimate Question of Life.
-    np.random.seed(42)
-
-    # 1. Generate the dataset
-    # You can choose between factory.generate_spiral(turns=5) or
-    # factory.generate_donut(inner=0.3, outer=0.7, evenly=False)
-    t_samples = np.pow(2, 11)
-    t_noise = 0.05
-    factory = DataFactory(samples=t_samples, noise=t_noise)
-    X_raw, targets = factory.generate_donut(inner=0.3, outer=0.7, evenly=True)
-    logging.info(f"Dataset generated: Samples - {t_samples}; noise - {t_noise}")
-    logging.info(f"Raw data shape. X_raw: {X_raw.shape}; Targets: {targets.shape}")
-
-    # 2. Feature Engineering
-    engine = FeatureEngine(
-        use_squares=False, use_interaction=False, use_trig=False, mode="polar"
+    cfg = NeuraConfig(
+        hidden_layers=[16, 16],
+        samples=2048,
+        batch_size=16,
+        data_mode="rhodonea",  # "donut", "spiral", "rhodonea"
+        rose_k=2.5,
+        noise=0.03,
+        feature_mode="polar",
+        color_gradient=False,
+        show_levels=True,
+        show_dataset_points=True,
     )
-    logging.info(f"Mode: {engine.mode}")
-    if engine.mode == "cartesian":
-        logging.info(
-            "Featuring: Squares: %s; Interaction: %s; Trigonometry: %s;",
-            engine.use_squares,
-            engine.use_interaction,
-            engine.use_trig,
-        )
+
+    # 1. Generate the dataset based on cfg.data_mode
+    factory = DataFactory(cfg)
+    X_raw, targets = factory.generate()
+
+    # 2. Feature Engineering, transform coordinates (e.g., Cartesian to Polar)
+    engine = FeatureEngine(cfg)
     X_featured = engine.transform(X_raw)
 
     # 3. Scaling
-    # Normalizes data to [-1, 1] range, essential for neural network convergence
+    # Normalizes data to [-1, 1] range
     logging.info("Scaling...")
-    scaler = DataScaler(feature_range=(-1, 1))
+    scaler = DataScaler(cfg)
     X_transformed = scaler.fit_transform(X_featured)
-    logging.info(f"Final Input Shape: {X_transformed.shape}")
-    logging.info(
-        f"X_transformed Range: [{X_transformed.min():.2f}, {X_transformed.max():.2f}]"
-    )
 
     # 4. Initialize the MLP
-    # Define architecture: [Input Nodes, Hidden Layers..., Output Nodes]
-    # Input nodes are calculated automatically based on your features
+    # Dimensions are detected automatically from the processed features
     input_dim = X_transformed.shape[1]
     output_dim = targets.shape[1]
-    hidden_layers = [3]
+    hidden_layers = cfg.hidden_layers
     logging.info(
         f"Create Neural Network: [{input_dim}] --> {hidden_layers} --> [{output_dim}]"
     )
 
-    brain = DeepNeuralNetwork([input_dim] + hidden_layers + [output_dim])
+    brain = DeepNeuralNetwork(
+        config=cfg, layers_size=[input_dim] + hidden_layers + [output_dim]
+    )
 
     # 5. Run Training & Visualization
     fit(
         model=brain,
-        engine=engine,
         inputs=X_transformed,
         targets=targets,
-        scaler=scaler,
-        X_raw=X_raw,
-        epochs=1001,  # Total training iterations
-        batch_size=64,  # Number of samples per gradient update
-        initial_lr=0.001,  # Initial learning rate
-        decay_rate=0.01,  # Smooth learning rate decay
-        visualize=True,  # Toggle real-time Matplotlib animation
-        view_range=1.5,  # Visible area [-view_range; +view_range]
-        color_gradient=False,  # Use solid colors or probability gradients
-        show_dataset_points=True,  # Show/hide original data points
-        show_levels=True,  # Toggle decision boundary contours
+        cfg=cfg,
+        X_raw=X_raw,  # Original points for plotting
+        scaler=scaler,  # Required to de-scale boundaries
+        engine=engine,  # Required to re-feature decision grid
     )
 
 
