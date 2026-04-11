@@ -70,51 +70,26 @@ class DataFactory:
         """Generate dataset by choosing a mode."""
         mode = self.cfg.data_mode.lower()
 
-        if mode == "donut":
-            return self.generate_donut()
-        elif mode == "spiral":
-            return self.generate_spiral()
+        if mode == "multidonut":
+            return self.generate_mdonut()
+        elif mode == "spirals":
+            return self.generate_spirals()
         elif mode == "rhodonea":
             return self.generate_rhodonea()
         else:
             raise ValueError(f"Unknown Data Mode: {mode}")
 
-    def generate_spiral(self) -> tuple:
-        """Generate dataset for two intertwined spirals."""
-        n = self.cfg.samples // 2
-        noise = self.cfg.noise
-        turns = self.cfg.spiral_turns
-
-        # The parameter *t* determines the radius and the angle simultaneously.
-        t = np.linspace(0, 1, n)
-        theta = t * turns * np.pi  # Number of turns
-
-        # Spiral 1 (Class 0)
-        r1 = t * 1.0
-        x1 = np.c_[r1 * np.cos(theta), r1 * np.sin(theta)]
-        x1 += self.rng.normal(0, noise, x1.shape)
-        y1 = np.zeros((n, 1))
-
-        # Spiral 2 (Class 1) — Rotated 180 degrees
-        r2 = t * 1.0
-        x2 = np.c_[-r2 * np.cos(theta), -r2 * np.sin(theta)]
-        x2 += self.rng.normal(0, noise, x2.shape)
-        y2 = np.ones((n, 1))
-
-        return self._shuffle_and_return(np.vstack([x1, x2]), np.vstack([y1, y2]))
-
-    def generate_donut(self) -> tuple:
-        """Generate Points inside the ring and outside/inside the hole (0).
+    def generate_mdonut(self) -> tuple:
+        """Generate points, multiple classes - shape Target.
 
         Points can be distributed evenly along the radius, or closer to the center.
         """
         samples = self.cfg.samples
         noise = self.cfg.noise
-        inner = self.cfg.donut_r_inner
-        outer = self.cfg.donut_r_outer
-        evenly_dist = self.cfg.donut_r_evenly_dist
+        radii = sorted(self.cfg.mdonut_radii, reverse=True)
+        evenly_dist = self.cfg.mdonut_r_evenly_dist
 
-        max_radius = outer + (outer - inner)
+        max_radius = max(radii) * 1.2
         u = self.rng.uniform(0, 1, (samples, 1))
 
         if evenly_dist:
@@ -128,48 +103,109 @@ class DataFactory:
         y_col = rho * np.sin(phi)
         X = np.hstack([x_col, y_col])
 
-        y = np.logical_and(rho >= inner, rho <= outer).astype(float).reshape(-1, 1)
+        y_labels = np.zeros((samples, 1), dtype=int)
+        num_classes = 0
+
+        for i, r in enumerate(radii):
+            if i % 2 == 0:
+                num_classes += 1
+                current_fill = num_classes
+            else:
+                current_fill = 0
+
+            y_labels[rho.flatten() <= r] = current_fill
+
+        num_classes = num_classes + 1
+        y = np.eye(num_classes)[y_labels.reshape(-1)]
+
         if noise > 0:
             X += self.rng.normal(0, noise, X.shape)
 
         return X, y
 
-    def generate_rhodonea(self) -> tuple:
-        """Generate Points inside a Rose (Rhodonea curve).
+    def generate_spirals(self) -> tuple:
+        """Generate dataset for N intertwined spirals with One-Hot encoding."""
+        num_spirals = self.cfg.num_spirals
+        samples_per_class = self.cfg.samples // num_spirals
+        noise = self.cfg.noise
+        turns = self.cfg.spiral_turns
 
-        a - maximum radius
-        k - number of petals (2k petals will be generated)
+        X_list = []
+        Y_list = []
 
+        # Progression Parameter (Radius and Angle)
+        t = np.linspace(0, 1, samples_per_class)
+
+        for i in range(num_spirals):
+            # Phase shift fore each spiral
+            angle_offset = (i * 2 * np.pi) / num_spirals
+            theta = t * turns * np.pi + angle_offset
+
+            r = t * self.cfg.spiral_max_radius
+            x = np.c_[r * np.cos(theta), r * np.sin(theta)]
+
+            # Add noise
+            if noise > 0:
+                x += self.rng.normal(0, noise, x.shape)
+
+            # Create One-Hot
+            y = np.zeros((samples_per_class, num_spirals))
+            y[:, i] = 1
+
+            X_list.append(x)
+            Y_list.append(y)
+
+        X = np.vstack(X_list)
+        Y = np.vstack(Y_list)
+
+        return self._shuffle_and_return(X, Y)
+
+    def generate_rhodonea(self, num_layers: int = 2) -> tuple:
+        """Generate Points inside a Rose (Rhodonea curve) with multiple layers.
+
+        Layers:
+        - Class 0: Background (Outside the flower)
+        - Class 1 to num_layers: Concentric zones inside the petals
         """
-        a = self.cfg.rose_a
-        k = self.cfg.rose_k
+        num_layers = self.cfg.rhodonea_NumOfLayers
+        a = self.cfg.rhodonea_max_radius
+        k = self.cfg.rhodonea_k
         samples = self.cfg.samples
         noise = self.cfg.noise
+        evenly_dist = self.cfg.rhodonea_r_evenly_dist
 
-        max_radius = a * 1.3
-
+        max_radius = a * 1.2
         u = self.rng.uniform(0, 1, (samples, 1))
-        rho = np.sqrt(u) * max_radius
+        if evenly_dist:
+            rho = np.sqrt(u) * max_radius
+        else:
+            rho = u * max_radius
+
         phi = self.rng.uniform(0, 2 * np.pi, (samples, 1))
 
-        x_col = rho * np.cos(phi)
-        y_col = rho * np.sin(phi)
-        X = np.hstack([x_col, y_col])
+        X = np.column_stack((rho * np.cos(phi), rho * np.sin(phi)))
 
         boundary_r = np.abs(a * np.cos(k * phi))
-        y = (rho <= boundary_r).astype(float).reshape(-1, 1)
+
+        # Initialize the target matrix (all — Class 0 / Background)
+        num_classes = num_layers + 1
+        y_one_hot = np.zeros((samples, num_classes))
+        y_one_hot[:, 0] = 1
+
+        # Slice the flower into layers
+        # Proceed from the outer layer to the inner one to overwrite values
+        for i in range(1, num_classes):
+            layer_threshold = boundary_r * (1.0 - (i - 1) / num_layers)
+
+            mask = (rho <= layer_threshold).flatten()
+
+            y_one_hot[mask, :] = 0
+            y_one_hot[mask, i] = 1
 
         if noise > 0:
             X += self.rng.normal(0, noise, X.shape)
 
-        return X, y
-
-    def generate_xor(self) -> tuple:
-        """Generate classic XOR: different coordinate signs."""
-        samples = self.cfg.samples
-        X = self.rng.uniform(-1, 1, (samples, 2))
-        y = (X[:, 0] * X[:, 1] > 0).astype(float).reshape(-1, 1)
-        return X, y
+        return self._shuffle_and_return(X, y_one_hot)
 
     def _shuffle_and_return(self, X: np.ndarray, y: np.ndarray) -> tuple:
         """Shuffle data. Support method."""

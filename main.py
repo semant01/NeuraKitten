@@ -17,19 +17,31 @@ def clear_terminal() -> None:
 
 def main() -> None:
     """Run the main entry point of the script."""
-    logging.info("Main entry point of the script")
+    logging.info("Hello, NeuraKitten!\n")
 
     cfg = NeuraConfig(
-        hidden_layers=[16, 16],
+        epochs=501,
+        hidden_layers=[32, 24, 16, 12],
         samples=2048,
-        batch_size=16,
-        data_mode="rhodonea",  # "donut", "spiral", "rhodonea"
-        rose_k=2.5,
+        batch_size=32,
+        data_mode="spirals",  # "spirals", "rhodonea", "multidonut"
+        spiral_max_radius=2.0,
+        num_spirals=5,
+        spiral_turns=5,
         noise=0.03,
         feature_mode="polar",
-        color_gradient=False,
-        show_levels=True,
-        show_dataset_points=True,
+        view_range=2.5,
+        initial_lr=0.001,
+        decay_rate=0.01,
+    )
+
+    logging.info(
+        f"Run for {cfg.epochs} epochs\n\n"
+        f"Samples: {cfg.samples} ; batch size: {cfg.batch_size}\n\n"
+        f"Data mode: {cfg.data_mode}\n"
+        f"Noise: {cfg.noise}\n"
+        f"Seed: {cfg.seed}\n\n"
+        f"Feature mode: {cfg.feature_mode}\n"
     )
 
     # 1. Generate the dataset based on cfg.data_mode
@@ -42,7 +54,6 @@ def main() -> None:
 
     # 3. Scaling
     # Normalizes data to [-1, 1] range
-    logging.info("Scaling...")
     scaler = DataScaler(cfg)
     X_transformed = scaler.fit_transform(X_featured)
 
@@ -52,8 +63,9 @@ def main() -> None:
     output_dim = targets.shape[1]
     hidden_layers = cfg.hidden_layers
     logging.info(
-        f"Create Neural Network: [{input_dim}] --> {hidden_layers} --> [{output_dim}]"
+        f"Neural Network: [{input_dim}] --> {hidden_layers} --> [{output_dim}]\n"
     )
+    logging.info(f"Hidden layers activation: {cfg.activation_hidden}")
 
     brain = DeepNeuralNetwork(
         config=cfg, layers_size=[input_dim] + hidden_layers + [output_dim]

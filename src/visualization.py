@@ -24,6 +24,7 @@ def live_plot(
     epoch: int,
     lr: float,
     current_loss: float,
+    accuracy: float,
     ax: Axes,
 ) -> None:
     """Update the live visualization of the neural network's decision boundary.
@@ -38,12 +39,13 @@ def live_plot(
         epoch: Current training epoch.
         lr: Current learning rate.
         current_loss: Current loss value.
+        accuracy: Current prediction accuracy.
         ax: Matplotlib axes object to draw on.
 
     """
     ax.clear()  # Clear previous frame
     view_range = cfg.view_range
-    res = 100  # grid-map resolution
+    res = cfg.resolution  # grid-map resolution
 
     # 1.Create grid cells
     x_vals = np.linspace(-view_range, view_range, res)
@@ -53,39 +55,41 @@ def live_plot(
     # 2. Predict the entire grid cell area
     raw_grid = np.c_[xx.ravel(), yy.ravel()]
     extended_grid = engine.transform(raw_grid)
-
-    # Scaling
     scaled_grid = scaler.transform(extended_grid)
 
-    # Predict through vectors
-    zz = brain.predict(scaled_grid).reshape(xx.shape)
+    # 3. Predict through vectors
+    preds = brain.predict(scaled_grid)  # (10000, num_classes) or (10000, 1)
+    zz = np.argmax(preds, axis=1).reshape(xx.shape)
+    num_classes = preds.shape[1]
+    plot_targets = np.argmax(targets, axis=1)
 
-    # 3. Plot gradient map
-    if cfg.color_gradient:
-        ax.contourf(xx, yy, zz, 256, cmap="YlOrRd", alpha=0.8)
-    else:
-        ax.contourf(xx, yy, zz, levels=[0.0, 0.5, 1.0], colors=["white", "#7f7deb"])
+    # 4. Plot Decision Boundaries
+    levels = np.arange(num_classes + 1) - 0.5
+    ax.contourf(xx, yy, zz, levels=levels, cmap=cfg.cmap, alpha=0.4)
 
-    if cfg.show_levels:
-        ax.contour(xx, yy, zz, levels=10, colors="black", linewidths=0.2, alpha=0.9)
-
-    if cfg.show_dataset_points:
-        if X_raw is not None:
-            ax.scatter(
-                X_raw[:, 0],
-                X_raw[:, 1],
-                c=targets.ravel(),
-                s=15,  # points size
-                cmap="RdYlGn",
-                edgecolors="white",
-                linewidth=0.5,
-                alpha=0.7,
-            )
+    # 5. Plot dataset points
+    if cfg.show_dataset_points and X_raw is not None:
+        ax.scatter(
+            X_raw[:, 0],
+            X_raw[:, 1],
+            c=plot_targets,
+            s=15,
+            cmap=cfg.cmap,
+            edgecolors="white",
+            linewidth=0.5,
+            alpha=0.7,
+        )
 
     ax.set_xlim(-view_range, view_range)
     ax.set_ylim(-view_range, view_range)
 
-    ax.set_title(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.6f}")
+    ax.set_title(
+        f"Epoch: {epoch} | "
+        f"Loss: {current_loss:.6f} | "
+        f"Acc: {accuracy:.2f}% | "
+        f"LR: {lr:.6f}"
+    )
+
     ax.set_aspect("equal")
 
     # Update frames

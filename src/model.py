@@ -44,14 +44,14 @@ class DeepNeuralNetwork:
         self.m_b = [np.zeros_like(b) for b in self.biases]
         self.v_b = [np.zeros_like(b) for b in self.biases]
 
-    def sigmoid(self, x: np.ndarray) -> np.ndarray:
-        """Return result of sigmoid function."""
-        return 1.0 / (1.0 + np.exp(-x))
+    # def sigmoid(self, x: np.ndarray) -> np.ndarray:
+    #    """Return result of sigmoid function."""
+    #    return 1.0 / (1.0 + np.exp(-x))
 
-    def sigmoid_deriv(self, output: np.ndarray) -> np.ndarray:
-        """Return result of sigmoid detivative."""
-        # Expected 'x' is the output of the sigmoid function
-        return output * (1.0 - output)
+    # def sigmoid_deriv(self, output: np.ndarray) -> np.ndarray:
+    #    """Return result of sigmoid detivative."""
+    #    # Expected 'x' is the output of the sigmoid function
+    #    return output * (1.0 - output)
 
     def leaky_relu(self, x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
         """Return result of Leaky Re-LU function."""
@@ -63,6 +63,13 @@ class DeepNeuralNetwork:
         # Expected 'x' is Z before activation
         return np.where(x > 0, 1, alpha)
 
+    def softmax(self, x: np.ndarray) -> np.ndarray:
+        """Softmax activation for multi-class output."""
+        # shift_x for stability to evoid getting NaN due to high exp
+        shift_x = x - np.max(x, axis=0, keepdims=True)
+        exps = np.exp(shift_x)
+        return exps / np.sum(exps, axis=0, keepdims=True)
+
     def predict(self, inputs_list: np.ndarray) -> np.ndarray:
         """Forward pass to generate predictions."""
         inputs = np.array(inputs_list, ndmin=2).T
@@ -71,7 +78,7 @@ class DeepNeuralNetwork:
         for i in range(len(self.weights)):
             z = np.dot(self.weights[i], activation) + self.biases[i]
             if i == len(self.weights) - 1:
-                activation = self.sigmoid(z)
+                activation = self.softmax(z)
             else:
                 activation = self.leaky_relu(z)
 
@@ -87,7 +94,7 @@ class DeepNeuralNetwork:
 
         self.t += 1
 
-        # 1. Forward propagation
+        # 1.--- Forward propagation ---
         zs = []
         activations = [inputs]
 
@@ -97,20 +104,22 @@ class DeepNeuralNetwork:
 
             # The last layer is different activation function (sigmoind)
             if i == len(self.weights) - 1:
-                a = self.sigmoid(z)
+                a = self.softmax(z)
             else:
                 a = self.leaky_relu(z)
             activations.append(a)
 
-        # 2. Error and Loss calculation (MSE - Mean Squared Error)
+        # 2. Error and Loss calculation
+        # Categorical Cross-Entropy for multi-class
+        eps = self.cfg.eps
+        predictions = np.clip(activations[-1], eps, 1.0 - eps)
+        loss = -np.sum(targets * np.log(predictions)) / batch_size
         errors = activations[-1] - targets
-        loss = np.mean(np.square(errors))
 
         # 3. Backward propagation
         for i in reversed(range(len(self.weights))):
             if i == len(self.weights) - 1:
-                # Output layer delta (Sigmoid)
-                delta = errors * self.sigmoid_deriv(activations[i + 1])
+                delta = errors
             else:
                 # Hidden layer delta (Leaky ReLU)
                 delta = errors * self.leaky_relu_deriv(zs[i])

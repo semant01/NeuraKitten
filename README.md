@@ -1,33 +1,32 @@
 # NeuraKitten
-A lightweight, NumPy-based Multi-Layer Perceptron (MLP) implementation built from scratch for educational purposes.
+A lightweight, NumPy-based **Multi-class** Multi-Layer Perceptron (MLP) implementation built from scratch for educational purposes.
 
-This project demonstrates how a simple neural network can classify complex non-linear patterns. By leveraging **Feature Engineering**, NeuraKitten transforms standard Cartesian coordinates into Polar coordinates to achieve high-precision boundary classification with minimal architecture.
+This project demonstrates how a neural network can learn to classify complex, non-linear multi-class patterns. By leveraging **Feature Engineering**, NeuraKitten transforms standard Cartesian coordinates into Polar coordinates to achieve high-precision boundary classification even with a compact architecture.
 
 ![Neural Network Decision Boundary Animation](demo.png)
 
 ## Key Features
-- **Custom Data Factory**: Generates synthetic "Donut", "Spiral" or "Rhodonea curve" datasets with adjustable noise and density.
+- **Multi-class Data Factory**: Generates synthetic "Donut", "N-armed Spiral", or "Multi-layered Rose" datasets with an arbitrary number of labels.
 - **Feature Engineering Engine**: Implements transformations including Polar coordinates $(r, sin(\phi), cos(\phi))$, polynomial features $(x^2, y^2, x \cdot y)$, and trigonometric expansions.
-- **Why Polar?** By linearizing circular boundaries, we allow a simpler network to achieve 99%+ accuracy significantly faster than using raw $(x, y)$ data.
-- **Live Visualization**: Real-time plotting of decision boundaries and loss convergence during the training process.
-- **Modular Architecture**: Clean separation between model logic, data processing, and training loops.
-- **Advanced Optimization**: Implements the ADAM (Adaptive Moment Estimation) optimizer with bias correction for faster and more stable convergence.
-- **Comprehensive Versioning**: Detailed project evolution tracked in CHANGELOG.md following SemVer standards.
+- **Why Polar?** By linearizing circular and spiral boundaries, we allow the network to achieve high accuracy significantly faster than using raw $(x, y)$ data.
+- **Softmax Classification**: Proper multi-class probabilistic output, ensuring the sum of all class probabilities equals 1.0.
+- **Live Visualization**: Real-time plotting of discrete decision boundaries and loss convergence with high-resolution grid mapping.
+- **Advanced Optimization**: Implements the ADAM (Adaptive Moment Estimation) optimizer with numerical stability tricks like `epsilon` clipping and `shift_x` Softmax.
 
 ## Mathematical Foundations
 - **Optimization**: ADAM (Adaptive Moment Estimation) with time-based learning rate decay.  
-- **Initialization**: He Initialization for stable variance in deep networks.  
-- **Activation**: Leaky ReLU for hidden layers and Sigmoid for the output layer.  
-- **Loss Function**: Mean Squared Error (MSE).  
+- **Initialization**: He Initialization for stable variance in deep architectures.  
+- **Activation**: Leaky ReLU for hidden layers and Softmax for the output layer.  
+- **Loss Function**: Categorical Cross-Entropy for robust multi-class training. 
 
 ## Project Structure
 ```text
 NeuraKitten/
 ├── src/
-│   ├── config.py           # Configuration parameters for Network architecture, Hyperparameters, etc.
+│   ├── config.py           # Hyperparameters and data geometry settings.
 │   ├── data_utils.py       # DataFactory, FeatureEngine, DataScaler
 │   ├── model.py            # DeepNeuralNetwork class
-│   ├── trainer.py          # Training loop logic
+│   ├── trainer.py          # Training loop logic (fit)
 │   └── visualization.py    # Live plotting with Matplotlib
 ├── main.py                 # Entry point
 ├── requirements.txt        # Project dependencies
@@ -61,13 +60,11 @@ Simply execute the main script to start the training and visualization:
 python main.py
 ```
 
-### Configuration.
+### Example Configuration.
 You can customize the entire pipeline from data geometry to neural architecture using the `NeuraConfig` dataclass.
 
 
 ```
-import numpy as np
-
 from src.config import NeuraConfig
 from src.data_utils import DataFactory, DataScaler, FeatureEngine
 from src.model import DeepNeuralNetwork
@@ -78,16 +75,19 @@ def main() -> None:
     """Run the main entry point of the script."""
 
     cfg = NeuraConfig(
-        hidden_layers=[16, 16],
+        epochs=501,
+        hidden_layers=[32, 24, 16, 12],
         samples=2048,
-        batch_size=16,
-        data_mode="rhodonea",  # "donut", "spiral", "rhodonea"
-        rose_k=2.5,
+        batch_size=32,
+        data_mode="spirals",  # "spirals", "rhodonea", "multidonut"
+        spiral_max_radius=2.0,
+        num_spirals=5,
+        spiral_turns=5,
         noise=0.03,
         feature_mode="polar",
-        color_gradient=False,
-        show_levels=True,
-        show_dataset_points=True,
+        view_range=2.5,
+        initial_lr=0.001,
+        decay_rate=0.01,
     )
 
     # 1. Generate the dataset based on cfg.data_mode

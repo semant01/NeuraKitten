@@ -8,8 +8,10 @@ class NeuraConfig:
 
     # --- Network Architecture ---
     hidden_layers: List[int] = field(default_factory=lambda: [12, 12])
-    # activation_hidden: str = "leaky_relu"
-    # activation_output: str = "sigmoid"
+    activation_hidden: str = "leaky_relu"
+
+    # --- Categorical Cross-Entropy ---
+    eps = 1e-15
 
     # --- Hyperparameters & Training ---
     epochs: int = 1001
@@ -25,8 +27,20 @@ class NeuraConfig:
 
     # --- Data Generation ---
     samples: int = 2048
-    noise: float = 0.05
-    data_mode: str = "rhodonea"  # "donut", "spiral", "rhodonea"
+    noise: float = 0
+    data_mode: str = "donut"
+
+    #       Multi-donut
+    mdonut_radii: List[float] = field(
+        default_factory=lambda: [
+            1.2,
+            0.7,
+            0.5,
+            0.3,
+        ]
+    )
+    mdonut_r_evenly_dist: bool = False  # distribute evenly along the radius
+    #                            or closer to the center
 
     #       Donut
     donut_r_inner: float = 0.3  # Inner radius
@@ -35,11 +49,15 @@ class NeuraConfig:
     #                            or closer to the center
 
     #       Spiral
-    spiral_turns: float = 2.5  # number of turns
+    num_spirals: int = 3
+    spiral_turns: float = 2.5  # number of semi-turns
+    spiral_max_radius: float = 1.0
 
     #       Rhodonea
-    rose_k: float = 3.0  # 2k petals for rhodonea
-    rose_a: float = 1.0  # Maximum radius of rhodonea
+    rhodonea_k: float = 3.0  # 2k petals for rhodonea
+    rhodonea_max_radius: float = 1.0  # Maximum radius of rhodonea
+    rhodonea_NumOfLayers: int = 1  # Number of classes in addition to background class
+    rhodonea_r_evenly_dist: bool = False
 
     # --- Feature Engineering ---
     feature_mode: str = "polar"  # "cartesian", "polar"
@@ -52,10 +70,11 @@ class NeuraConfig:
 
     # --- UI / UX / Visualization ---
     visualize: bool = True
+    resolution: int = 300
     view_range: float = 1.5
-    color_gradient: bool = False
+    cmap: str = "CMRmap"
+    #     cmap options:  "gist_stern", "tab20c", "CMRmap", "nipy_spectral" ,"gnuplot2"
     show_dataset_points: bool = True
-    show_levels: bool = True
     frame_skip: int = 1
     frame_log: int = 100
 

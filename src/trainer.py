@@ -80,9 +80,22 @@ def fit(
         current_loss = float(np.mean(epoch_losses))
         history_loss.append(current_loss)
 
+        predictions = model.predict(inputs)
+
+        # The most probable class index
+        pred_labels = np.argmax(predictions, axis=1)
+        true_labels = np.argmax(targets, axis=1)
+
+        accuracy = np.mean(pred_labels == true_labels) * 100
+
         # Log reporting
         if epoch % cfg.frame_log == 0:
-            logging.info(f"Epoch: {epoch} | Loss: {current_loss:.6f} | LR: {lr:.6f}")
+            logging.info(
+                f"Epoch: {epoch} | "
+                f"Loss: {current_loss:.6f} | "
+                f"Acc: {accuracy:.2f}% | "
+                f"LR: {lr:.6f}"
+            )
 
         # Visual plot
         if cfg.visualize and epoch % cfg.frame_skip == 0:
@@ -96,6 +109,7 @@ def fit(
                 epoch=epoch,
                 lr=lr,
                 current_loss=current_loss,
+                accuracy=accuracy,
                 ax=ax,
             )
 
