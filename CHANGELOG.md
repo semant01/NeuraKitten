@@ -3,6 +3,25 @@
 All notable changes to the "NeuraKitten" project will be documented in this file.  
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-12
+
+### Added
+- Created `NeuraDataLoader` class to encapsulate batching logic, supporting both standard and balanced data distribution.
+- Added `balanced_batches` flag to `NeuraConfig`, allowing global control over class balancing strategies from a single entry point.
+- Implemented automated batch size adjustment with informative logging to maintain perfect class ratios during training.
+- Implemented comprehensive Python type hints and Google-style docstrings across all modules to enhance maintainability and IDE support.
+
+### Changed
+- Streamlined `main.py` by delegating data processing and training orchestration to the centralized `NeuraPipeline`.
+- Refactored Core Architecture: Decomposed the `DeepNeuralNetwork` class to separate concerns and improve code readability without altering the underlying mathematical approach.
+- Redesigned `trainer.py`, `data_utils.py` and `visualization.py` to minimize computational overhead and provide a cleaner, more modular code structure.
+- Enhanced `NeuraDataLoader` with an oversampling mechanism to prevent data loss in minority classes while maintaining strict balance.
+- Migrated from global `np.random` state to isolated `Generator` instances (PCG64) to ensure robust experiment reproducibility.
+
+
+### Fixed
+- Unified `epsilon` usage. The same constant is now consistently applied to prevent division by zero in the ADAM optimizer and to stabilize Categorical Cross-Entropy loss calculations via `np.clip`.
+
 
 ## [2.0.0] - 2026-04-11
 

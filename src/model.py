@@ -4,115 +4,170 @@ from src.config import NeuraConfig
 
 
 class DeepNeuralNetwork:
-    """A flexible Deep Neural Network implementation from scratch using NumPy.
+    """Multilayer Perceptron (MLP) implementation with ADAM optimizer.
 
-    Supports arbitrary hidden layer architectures and vectorized batch training.
+    Supports custom hidden layer architectures, He initialization,
+    and categorical cross-entropy loss for multi-class classification.
     """
 
-    def __init__(self, config: NeuraConfig, layers_size: list) -> None:
-        """Initiate parameters for the Neuaral Network."""
+    weights: list[np.ndarray]
+    biases: list[np.ndarray]
+    m_w: list[np.ndarray]
+    v_w: list[np.ndarray]
+    m_b: list[np.ndarray]
+    v_b: list[np.ndarray]
+
+    def __init__(self, config: NeuraConfig, layer_sizes: list[int]) -> None:
+        """Initialize the network architecture and optimization parameters.
+
+        Args:
+            config (NeuraConfig): Centralized configuration object.
+            layer_sizes (list[int]): List containing the number of neurons
+                for each layer (input, hidden, output).
+
+        """
         self.cfg = config
 
         # Reproducibility anchor.
         self.rng = np.random.default_rng(seed=self.cfg.seed)
 
-        self.layers_size = layers_size
-        self.weights = []
-        self.biases = []
-
-        self.beta1 = self.cfg.beta1
-        self.beta2 = self.cfg.beta2
-        self.epsilon = self.cfg.epsilon
+        self.layer_sizes = layer_sizes
         self.t = 0
 
-        # He Initialization: optimized for layers using ReLU/Leaky ReLU
-        for i in range(len(layers_size) - 1):
-            n_in = layers_size[i]  # nodes at this layer
-            n_out = layers_size[i + 1]  # nodes at next layer
+        self._initialize_parameters()
 
-            # Weights: normal distribution with variance scaled by input size
+    def _initialize_parameters(self) -> None:
+        """Allocates memory and initializes weights, biases, and ADAM optimizer moments.
+
+        Uses He initialization for weights to suit Leaky ReLU activation and
+        initializes all biases and ADAM moments to zero.
+
+        Attributes initialized:
+            weights (list[np.ndarray]): List of weight matrices for each layer.
+            biases (list[np.ndarray]): List of bias vectors for each layer.
+            m_w (list[np.ndarray]): First moment vectors for weights (ADAM).
+            v_w (list[np.ndarray]): Second moment vectors for weights (ADAM).
+            m_b (list[np.ndarray]): First moment vectors for biases (ADAM).
+            v_b (list[np.ndarray]): Second moment vectors for biases (ADAM).
+        """
+        self.weights: list[np.ndarray] = []
+        self.biases: list[np.ndarray] = []
+
+        self.m_w: list[np.ndarray] = []
+        self.v_w: list[np.ndarray] = []
+        self.m_b: list[np.ndarray] = []
+        self.v_b: list[np.ndarray] = []
+
+        for i in range(len(self.layer_sizes) - 1):
+            n_in = self.layer_sizes[i]
+            n_out = self.layer_sizes[i + 1]
+
+            # He Initialization: optimized for layers using ReLU/Leaky ReLU
             std = np.sqrt(2.0 / n_in)
             w = self.rng.normal(0.0, std, (n_out, n_in))
             self.weights.append(w)
 
-            # Biases: initialized to zero to ensure neutral starting state
+            # Biases initialization
             b = np.zeros((n_out, 1))
             self.biases.append(b)
 
-        self.m_w = [np.zeros_like(w) for w in self.weights]
-        self.v_w = [np.zeros_like(w) for w in self.weights]
-        self.m_b = [np.zeros_like(b) for b in self.biases]
-        self.v_b = [np.zeros_like(b) for b in self.biases]
-
-    # def sigmoid(self, x: np.ndarray) -> np.ndarray:
-    #    """Return result of sigmoid function."""
-    #    return 1.0 / (1.0 + np.exp(-x))
-
-    # def sigmoid_deriv(self, output: np.ndarray) -> np.ndarray:
-    #    """Return result of sigmoid detivative."""
-    #    # Expected 'x' is the output of the sigmoid function
-    #    return output * (1.0 - output)
+            # ADAM moments initialization
+            self.m_w.append(np.zeros_like(w))
+            self.v_w.append(np.zeros_like(w))
+            self.m_b.append(np.zeros_like(b))
+            self.v_b.append(np.zeros_like(b))
 
     def leaky_relu(self, x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
-        """Return result of Leaky Re-LU function."""
-        # Expected 'x' is Z after activation
+        """Apply the Leaky Rectified Linear Unit activation function.
+
+        Args:
+            x (np.ndarray): Input tensor (pre-activation values Z).
+            alpha (float): Slope of the activation function for x < 0.
+                Defaults to 0.01.
+
+        Returns:
+            np.ndarray: Activated values of the same shape as input.
+
+        """
         return np.where(x > 0, x, x * alpha)
 
     def leaky_relu_deriv(self, x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
-        """Return result of Leaky Re-LU derivative."""
-        # Expected 'x' is Z before activation
+        """Compute the derivative of the Leaky ReLU activation function.
+
+        Args:
+            x (np.ndarray): Input tensor (pre-activation values Z).
+            alpha (float): Slope for the negative gradient.
+                Defaults to 0.01.
+
+        Returns:
+            np.ndarray: Gradient of the activation function.
+
+        """
         return np.where(x > 0, 1, alpha)
 
     def softmax(self, x: np.ndarray) -> np.ndarray:
-        """Softmax activation for multi-class output."""
-        # shift_x for stability to evoid getting NaN due to high exp
+        """Compute the Softmax activation for multi-class classification.
+
+        Includes a shift (max subtraction) for numerical stability to
+        prevent overflow during exponentiation.
+
+        Args:
+            x (np.ndarray): Input logit tensor of shape (n_classes, batch_size).
+
+        Returns:
+            np.ndarray: Normalized probability distribution where the sum
+                of each column equals 1.
+
+        """
         shift_x = x - np.max(x, axis=0, keepdims=True)
         exps = np.exp(shift_x)
         return exps / np.sum(exps, axis=0, keepdims=True)
 
     def predict(self, inputs_list: np.ndarray) -> np.ndarray:
-        """Forward pass to generate predictions."""
+        """Perform a forward pass through the network to generate predictions.
+
+        Args:
+            inputs_list (np.ndarray): Input data matrix
+                of shape (n_samples, n_features).
+
+        Returns:
+            np.ndarray: Output probability matrix of shape (n_samples, n_classes).
+
+        """
         inputs = np.array(inputs_list, ndmin=2).T
-        activation = inputs
+        _, activations = self._forward(inputs)
 
-        for i in range(len(self.weights)):
-            z = np.dot(self.weights[i], activation) + self.biases[i]
-            if i == len(self.weights) - 1:
-                activation = self.softmax(z)
-            else:
-                activation = self.leaky_relu(z)
+        return activations[-1].T
 
-        return activation.T
+    def train(self, inputs: np.ndarray, targets: np.ndarray, lr: float) -> float:
+        """Perform one training step using backpropagation and ADAM.
 
-    def train(
-        self, inputs_list: np.ndarray, targets_list: np.ndarray, lr: float
-    ) -> float:
-        """Run Standard Backpropagation algorithm on a data batch and return loss."""
-        inputs = np.array(inputs_list, ndmin=2).T
-        targets = np.array(targets_list, ndmin=2).T
+        Args:
+            inputs (np.ndarray): Batch of input features.
+            targets (np.ndarray): One-hot encoded target labels.
+            lr (float): Current learning rate.
+
+        Returns:
+            float: The categorical cross-entropy loss for the current batch.
+
+        """
+        inputs = np.array(inputs, ndmin=2).T
+        targets = np.array(targets, ndmin=2).T
         batch_size = inputs.shape[1]
 
         self.t += 1
 
         # 1.--- Forward propagation ---
-        zs = []
-        activations = [inputs]
+        z_steps: list[np.ndarray] = []
+        activations: list[np.ndarray] = [inputs]
 
-        for i in range(len(self.weights)):
-            z = np.dot(self.weights[i], activations[-1]) + self.biases[i]
-            zs.append(z)
-
-            # The last layer is different activation function (sigmoind)
-            if i == len(self.weights) - 1:
-                a = self.softmax(z)
-            else:
-                a = self.leaky_relu(z)
-            activations.append(a)
+        z_steps, activations = self._forward(inputs)
 
         # 2. Error and Loss calculation
         # Categorical Cross-Entropy for multi-class
-        eps = self.cfg.eps
-        predictions = np.clip(activations[-1], eps, 1.0 - eps)
+        predictions: np.ndarray = np.clip(
+            activations[-1], self.cfg.epsilon, 1.0 - self.cfg.epsilon
+        )
         loss = -np.sum(targets * np.log(predictions)) / batch_size
         errors = activations[-1] - targets
 
@@ -122,7 +177,7 @@ class DeepNeuralNetwork:
                 delta = errors
             else:
                 # Hidden layer delta (Leaky ReLU)
-                delta = errors * self.leaky_relu_deriv(zs[i])
+                delta = errors * self.leaky_relu_deriv(z_steps[i])
 
             # Recalculate error for the previous layer
             if i > 0:
@@ -132,21 +187,88 @@ class DeepNeuralNetwork:
             grad_b = np.sum(delta, axis=1, keepdims=True) / batch_size
 
             # Weights moments
-            self.m_w[i] = self.beta1 * self.m_w[i] + (1 - self.beta1) * grad_w
-            self.v_w[i] = self.beta2 * self.v_w[i] + (1 - self.beta2) * (grad_w**2)
+            self.m_w[i], self.v_w[i] = self._update_moments(
+                self.m_w[i], self.v_w[i], grad_w
+            )
 
             # Biases moments
-            self.m_b[i] = self.beta1 * self.m_b[i] + (1 - self.beta1) * grad_b
-            self.v_b[i] = self.beta2 * self.v_b[i] + (1 - self.beta2) * (grad_b**2)
+            self.m_b[i], self.v_b[i] = self._update_moments(
+                self.m_b[i], self.v_b[i], grad_b
+            )
 
-            # Bias correction
-            m_hat = self.m_w[i] / (1 - self.beta1**self.t)
-            v_hat = self.v_w[i] / (1 - self.beta2**self.t)
-            m_b_hat = self.m_b[i] / (1 - self.beta1**self.t)
-            v_b_hat = self.v_b[i] / (1 - self.beta2**self.t)
-
-            # Apply updates
-            self.weights[i] -= lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
-            self.biases[i] -= lr * m_b_hat / (np.sqrt(v_b_hat) + self.epsilon)
+            # Bias correction and apply updates
+            self.weights[i] -= lr * self._get_adam_update(self.m_w[i], self.v_w[i])
+            self.biases[i] -= lr * self._get_adam_update(self.m_b[i], self.v_b[i])
 
         return float(loss)
+
+    def _forward(self, X: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        """Perform a full forward pass through the network layers.
+
+        Computes pre-activation values (Z) and activated values (A) for
+        each layer, handling the transition between hidden layer
+        activation (Leaky ReLU) and output activation (Softmax).
+
+        Args:
+            X (np.ndarray): Input feature matrix of shape (n_features, batch_size).
+
+        Returns:
+            tuple[list[np.ndarray], list[np.ndarray]]: A tuple containing:
+                - z_steps: List of pre-activation values for each layer.
+                - activations: List of activated values, including the
+                  original input as the first element.
+
+        """
+        z_steps: list[np.ndarray] = []
+        activations: list[np.ndarray] = [X]
+
+        for i in range(len(self.weights)):
+            z = np.dot(self.weights[i], activations[-1]) + self.biases[i]
+            z_steps.append(z)
+
+            a = self.softmax(z) if i == len(self.weights) - 1 else self.leaky_relu(z)
+            activations.append(a)
+
+        return z_steps, activations
+
+    def _update_moments(
+        self, m: np.ndarray, v: np.ndarray, grad: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Update ADAM first and second moments for a given gradient.
+
+        Args:
+            m (np.ndarray): Current first moment.
+            v (np.ndarray): Current second moment.
+            grad (np.ndarray): Calculated gradient for the parameter.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Updated (m, v) moments.
+
+        """
+        beta1 = self.cfg.beta1
+        beta2 = self.cfg.beta2
+
+        m_new = beta1 * m + (1 - beta1) * grad
+        v_new = beta2 * v + (1 - beta2) * (grad**2)
+
+        return m_new, v_new
+
+    def _get_adam_update(self, m: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """Compute the ADAM gradient correction term.
+
+        Calculates bias-corrected first and second moments and returns
+        the final update component: m_hat / (sqrt(v_hat) + epsilon).
+
+        Args:
+            m (np.ndarray): The first moment vector (mean of gradients).
+            v (np.ndarray): The second moment vector (uncentered variance of gradients).
+
+        Returns:
+            np.ndarray: The computed update vector to be subtracted from
+                parameters, of the same shape as input moments.
+
+        """
+        m_hat = m / (1 - self.cfg.beta1**self.t)
+        v_hat = v / (1 - self.cfg.beta2**self.t)
+
+        return m_hat / (np.sqrt(v_hat) + self.cfg.epsilon)

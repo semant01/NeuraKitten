@@ -1,21 +1,25 @@
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
 class NeuraConfig:
-    """Configuration dataset."""
+    """Configuration dataset.
+
+    Centralized repository for all hyperparameters, architecture settings,
+    and data generation parameters of the NeuraKitten project.
+
+    This class serves as a single source of truth for the entire pipeline,
+    ensuring consistency across data factory, model initialization,
+    and training processes.
+    """
 
     # --- Network Architecture ---
-    hidden_layers: List[int] = field(default_factory=lambda: [12, 12])
-    activation_hidden: str = "leaky_relu"
-
-    # --- Categorical Cross-Entropy ---
-    eps = 1e-15
+    hidden_layers: list[int] = field(default_factory=lambda: [12, 12])
 
     # --- Hyperparameters & Training ---
-    epochs: int = 1001
+    epochs: int = 501
     batch_size: int = 32
+    balanced_batches: bool = True
     initial_lr: float = 0.001
     decay_rate: float = 0.01
     min_lr: float = 1e-5
@@ -23,15 +27,15 @@ class NeuraConfig:
     # --- ADAM Optimizer ---
     beta1: float = 0.9
     beta2: float = 0.999
-    epsilon: float = 1e-8
+    epsilon: float = 1e-8  # also used for Categorical Cross-Entropy
 
     # --- Data Generation ---
     samples: int = 2048
     noise: float = 0
-    data_mode: str = "donut"
+    data_mode: str = "multidonut"  # "multidonut", "spirals", "rhodonea"
 
     #       Multi-donut
-    mdonut_radii: List[float] = field(
+    mdonut_radii: list[float] = field(
         default_factory=lambda: [
             1.2,
             0.7,
@@ -49,14 +53,14 @@ class NeuraConfig:
     #                            or closer to the center
 
     #       Spiral
-    num_spirals: int = 3
+    spiral_num_classes: int = 3
     spiral_turns: float = 2.5  # number of semi-turns
     spiral_max_radius: float = 1.0
 
     #       Rhodonea
     rhodonea_k: float = 3.0  # 2k petals for rhodonea
     rhodonea_max_radius: float = 1.0  # Maximum radius of rhodonea
-    rhodonea_NumOfLayers: int = 1  # Number of classes in addition to background class
+    rhodonea_num_classes: int = 1  # Number of classes in addition to background class
     rhodonea_r_evenly_dist: bool = False
 
     # --- Feature Engineering ---
@@ -66,7 +70,7 @@ class NeuraConfig:
     use_trig: bool = False
 
     # --- Data Scaling ---
-    feature_range = (-1, 1)
+    feature_range: tuple[float, float] = (-1, 1)
 
     # --- UI / UX / Visualization ---
     visualize: bool = True
@@ -75,8 +79,8 @@ class NeuraConfig:
     cmap: str = "CMRmap"
     #     cmap options:  "gist_stern", "tab20c", "CMRmap", "nipy_spectral" ,"gnuplot2"
     show_dataset_points: bool = True
-    frame_skip: int = 1
-    frame_log: int = 100
+    frame_visual: int = 1
+    frame_log: int = 50
 
     # --- Reproducibility ---
     # Reproducibility anchor and the Answer to the Ultimate Question of Life.

@@ -23,15 +23,16 @@ This project demonstrates how a neural network can learn to classify complex, no
 ```text
 NeuraKitten/
 ├── src/
-│   ├── config.py           # Hyperparameters and data geometry settings.
-│   ├── data_utils.py       # DataFactory, FeatureEngine, DataScaler
-│   ├── model.py            # DeepNeuralNetwork class
-│   ├── trainer.py          # Training loop logic (fit)
-│   └── visualization.py    # Live plotting with Matplotlib
-├── main.py                 # Entry point
-├── requirements.txt        # Project dependencies
-├── CHANGELOG.md            # Revision history
-└── README.md               # Documentation
+│   ├── config.py         # Single source of truth for all hyperparameters and settings.
+│   ├── data_utils.py     # Dataset generation, feature engineering, and scaling tools.
+│   ├── model.py          # Core Neural Network and ADAM implementation using NumPy.
+│   ├── pipeline.py       # Orchestrator for the experiment lifecycle and component flow.
+│   ├── trainer.py        # Training loop management and dynamic Learning Rate logic.
+│   └── visualization.py  # Real-time decision boundary plotting and live metrics.
+├── main.py               # Entry point to trigger the NeuraPipeline.
+├── requirements.txt      # Project dependencies and environment requirements.
+├── CHANGELOG.md          # Record of all notable changes and refactoring history.
+└── README.md             # Project documentation and usage guide.
 ```
 
 ## Getting Started
@@ -66,63 +67,29 @@ You can customize the entire pipeline from data geometry to neural architecture 
 
 ```
 from src.config import NeuraConfig
-from src.data_utils import DataFactory, DataScaler, FeatureEngine
-from src.model import DeepNeuralNetwork
-from src.trainer import fit
+from src.pipeline import NeuraPipeline
 
 
 def main() -> None:
-    """Run the main entry point of the script."""
-
     cfg = NeuraConfig(
         epochs=501,
         hidden_layers=[32, 24, 16, 12],
         samples=2048,
         batch_size=32,
-        data_mode="spirals",  # "spirals", "rhodonea", "multidonut"
-        spiral_max_radius=2.0,
-        num_spirals=5,
-        spiral_turns=5,
-        noise=0.03,
+        balanced_batches=True,
+        data_mode="rhodonea",
+        rhodonea_k=3,
+        rhodonea_num_classes=5,
         feature_mode="polar",
-        view_range=2.5,
         initial_lr=0.001,
         decay_rate=0.01,
+        use_interaction=True,
+        use_squares=True,
+        use_trig=True,
     )
 
-    # 1. Generate the dataset based on cfg.data_mode
-    factory = DataFactory(cfg)
-    X_raw, targets = factory.generate()
-
-    # 2. Feature Engineering, transform coordinates (e.g., Cartesian to Polar)
-    engine = FeatureEngine(cfg)
-    X_featured = engine.transform(X_raw)
-
-    # 3. Scaling
-    # Normalizes data to [-1, 1] range
-    scaler = DataScaler(cfg)
-    X_transformed = scaler.fit_transform(X_featured)
-
-    # 4. Initialize the MLP
-    # Dimensions are detected automatically from the processed features
-    input_dim = X_transformed.shape[1]
-    output_dim = targets.shape[1]
-    hidden_layers = cfg.hidden_layers
-
-    brain = DeepNeuralNetwork(
-        config=cfg, layers_size=[input_dim] + hidden_layers + [output_dim]
-    )
-
-    # 5. Run Training & Visualization
-    fit(
-        model=brain,
-        inputs=X_transformed,
-        targets=targets,
-        cfg=cfg,
-        X_raw=X_raw,  # Original points for plotting
-        scaler=scaler,  # Required to de-scale boundaries
-        engine=engine,  # Required to re-feature decision grid
-    )
+    pipeline = NeuraPipeline(cfg)
+    pipeline.run()
 ```
 
 ## Tech Stack
