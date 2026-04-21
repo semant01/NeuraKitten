@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import matplotlib
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backend_bases import Event, KeyEvent
@@ -12,7 +13,7 @@ from .visualization import live_plot
 matplotlib.use("TkAgg")
 
 if TYPE_CHECKING:
-    from src.config import NeuraConfig
+    from src.structures import ExperimentContext, NeuraConfig
 
     from .data_utils import DataScaler, FeatureEngine
     from .model import DeepNeuralNetwork
@@ -58,6 +59,7 @@ def fit(
     inputs: np.ndarray,
     targets: np.ndarray,
     cfg: "NeuraConfig",
+    ctx: "ExperimentContext",
     X_raw: np.ndarray,
     scaler: "DataScaler",
     engine: "FeatureEngine",
@@ -72,6 +74,7 @@ def fit(
         inputs (np.ndarray): Preprocessed training features.
         targets (np.ndarray): Target labels (one-hot encoded).
         cfg (NeuraConfig): Configuration object with hyperparameters.
+        ctx (ExperimentContext): Experiment parameters to be used for logging
         X_raw (np.ndarray): Original features for visualization purposes.
         scaler (DataScaler): Scaler used for data normalization.
         engine (FeatureEngine): Engine used for feature mapping.
@@ -82,11 +85,34 @@ def fit(
     """
     state: dict[str, bool] = {"paused": False, "stop": False}
 
-    fig, ax = None, None
+    fig, ax_main, ax_loss, ax_info = None, None, None, None
 
     if cfg.visualize:
         plt.ion()
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig = plt.figure(figsize=(12, 7))
+        gs = gridspec.GridSpec(2, 2, width_ratios=[1.5, 1], height_ratios=[1, 1])
+
+        ax_main = fig.add_subplot(gs[:, 0])
+        ax_loss = fig.add_subplot(gs[0, 1])
+        ax_info = fig.add_subplot(gs[1, 1])
+        ax_acc = ax_loss.twinx()
+
+        ax_info.axis("off")
+
+        fig.suptitle(
+            f"Experiment: {ctx.experiment_name} | Data: {cfg.data_mode}",
+            fontsize=14,
+            fontweight="bold",
+        )
+        fig.tight_layout(rect=(0, 0.05, 0.95, 0.95))
+        fig.subplots_adjust(
+            left=0.1,
+            right=0.9,
+            top=0.88,
+            bottom=0.12,
+            wspace=0.4,
+            hspace=0.4,
+        )
 
         def on_press(event: Event) -> None:
             if not isinstance(event, KeyEvent):
@@ -133,13 +159,21 @@ def fit(
             predictions = model.predict(inputs)
             accuracy = _calculate_accuracy(predictions, targets)
 
+        ctx.update_metrics(epoch=epoch, loss=current_loss, accuracy=accuracy, lr=lr)
+
         if is_log_frame:
             logging.info(
                 f"Epoch: {epoch:4d} | Loss: {current_loss:.6f} | "
                 f"Acc: {accuracy:6.2f}% | LR: {lr:.6f}"
             )
 
-        if cfg.visualize and ax is not None and is_vis_frame:
+        if (
+            cfg.visualize
+            and ax_main is not None
+            and ax_loss is not None
+            and ax_info is not None
+            and is_vis_frame
+        ):
             live_plot(
                 brain=model,
                 cfg=cfg,
@@ -147,11 +181,11 @@ def fit(
                 scaler=scaler,
                 X_raw=X_raw,
                 targets=targets,
-                epoch=epoch,
-                lr=lr,
-                current_loss=current_loss,
-                accuracy=accuracy,
-                ax=ax,
+                ctx=ctx,
+                ax_main=ax_main,
+                ax_loss=ax_loss,
+                ax_acc=ax_acc,
+                ax_info=ax_info,
             )
 
     if cfg.visualize:

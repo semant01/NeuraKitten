@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from src.config import NeuraConfig
+    from src.structures import NeuraConfig
 
 
 class NeuraDataLoader:
@@ -56,6 +56,7 @@ class NeuraDataLoader:
                     "             to maintain 1:1 class balance "
                     f"({self.samples_per_class} samples/class).\n"
                 )
+
         else:
             self.samples_per_class = batch_size  # Not used yet
             self.real_batch_size = batch_size

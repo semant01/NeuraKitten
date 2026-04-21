@@ -3,6 +3,21 @@
 All notable changes to the "NeuraKitten" project will be documented in this file.  
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-04-21
+
+### Added
+- Created `ExperimentContext` dataclass to centralize runtime metadata. Integrated `ExperimentContext` into the `NeuraPipeline` and `fit` loop.
+- Implemented `GridSpec` to create a multi-pane dashboard (Main Plot, Metrics, and Info).
+
+### Changed
+- Refactored project structure: moved `NeuraConfig` and `ExperimentContext` to a dedicated `src/structures.py` file for better modularity (replaces `config.py`).
+- Optimized UI performance by moving layout and axis initialization outside the training loop.
+- Updated `README.md` to reflect the new project structure and visualization features.
+
+### Fixed
+- Resolved a critical memory leak and window "jumping" caused by redundant axis creation.
+
+
 ## [2.1.0] - 2026-04-12
 
 ### Added

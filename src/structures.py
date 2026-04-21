@@ -85,3 +85,44 @@ class NeuraConfig:
     # --- Reproducibility ---
     # Reproducibility anchor and the Answer to the Ultimate Question of Life.
     seed: int | None = 42
+
+
+@dataclass
+class ExperimentContext:
+    """Encapsulates the full state and configuration of a training experiment.
+
+    This class acts as a centralized data hub, carrying both static configuration
+    metadata and dynamic training metrics to be used by loggers and visualizers.
+
+    Attributes:
+        architecture_log (str): String representation of the NN structure.
+        epoch (int): Current training epoch.
+        loss (float): Current loss value.
+        accuracy (float): Current model accuracy (0.0 to 1.0).
+        lr (float): Current learning rate.
+
+    """
+
+    # Static Metadata
+    experiment_name: str
+    architecture_log: str
+
+    # Dynamic Metrics (initialized with defaults)
+    epoch: int = 0
+    loss: float = 0.0
+    accuracy: float = 0.0
+    lr: float = 0.0
+
+    loss_history: list[float] = field(default_factory=list)
+    acc_history: list[float] = field(default_factory=list)
+
+    def update_metrics(
+        self, epoch: int, loss: float, accuracy: float, lr: float
+    ) -> None:
+        """Update the running metrics and history of the experiment."""
+        self.epoch = epoch
+        self.loss = loss
+        self.accuracy = accuracy
+        self.lr = lr
+        self.loss_history.append(loss)
+        self.acc_history.append(accuracy)

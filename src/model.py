@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.config import NeuraConfig
+from src.structures import NeuraConfig
 
 
 class DeepNeuralNetwork:

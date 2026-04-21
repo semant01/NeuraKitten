@@ -23,10 +23,10 @@ This project demonstrates how a neural network can learn to classify complex, no
 ```text
 NeuraKitten/
 ├── src/
-│   ├── config.py         # Single source of truth for all hyperparameters and settings.
 │   ├── data_utils.py     # Dataset generation, feature engineering, and scaling tools.
 │   ├── model.py          # Core Neural Network and ADAM implementation using NumPy.
 │   ├── pipeline.py       # Orchestrator for the experiment lifecycle and component flow.
+│   ├── structures.py     # Single source of truth for all hyperparameters and settings.
 │   ├── trainer.py        # Training loop management and dynamic Learning Rate logic.
 │   └── visualization.py  # Real-time decision boundary plotting and live metrics.
 ├── main.py               # Entry point to trigger the NeuraPipeline.

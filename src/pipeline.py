@@ -1,8 +1,8 @@
 import logging
 
-from src.config import NeuraConfig
 from src.data_utils import DataFactory, DataScaler, FeatureEngine
 from src.model import DeepNeuralNetwork
+from src.structures import ExperimentContext, NeuraConfig
 from src.trainer import fit
 
 
@@ -24,26 +24,27 @@ class NeuraPipeline:
 
     """
 
-    def __init__(self, cfg: NeuraConfig) -> None:
+    def __init__(self, experiment_name: str, cfg: NeuraConfig) -> None:
         """Initialize the pipeline with a specific configuration.
 
         Args:
+            experiment_name (str): Experiment name for visualization and logging
             cfg (NeuraConfig): An instance of NeuraConfig holding
                 all necessary parameters for the experiment.
 
         """
+        self.experiment_name = experiment_name
         self.cfg = cfg
         self.factory = DataFactory(cfg)
         self.engine = FeatureEngine(cfg)
         self.scaler = DataScaler(cfg)
         self.model = None
 
-    def _log_setup(self, input_dim: int, output_dim: int) -> None:
+    def _log_setup(self, ctx: ExperimentContext) -> None:
         """Log the experiment parameters to the console for tracking.
 
         Args:
-            input_dim (int): Number of input features after engineering.
-            output_dim (int): Number of output classes (One-Hot).
+            ctx (ExperimentContext): Experiment parameters to be logged
 
         """
         logging.info(f"Run for {self.cfg.epochs} epochs")
@@ -53,11 +54,11 @@ class NeuraPipeline:
         logging.info(
             f"Data mode: {self.cfg.data_mode} | Feature mode: {self.cfg.feature_mode}\n"
         )
-        logging.info(
-            f"Neural Network: [{input_dim}] --> "
-            f"{self.cfg.hidden_layers} --> "
-            f"[{output_dim}]\n"
-        )
+        logging.info(f"Neural Network: {ctx.architecture_log}\n")
+
+    def _get_arch_string(self, input_dim: int, output_dim: int) -> str:
+        """Help to create a standardized architecture string."""
+        return f"[{input_dim}] --> {self.cfg.hidden_layers} --> [{output_dim}]"
 
     def run(self) -> None:
         """Execute the complete pipeline: Generation -> Transformation -> Training.
@@ -76,12 +77,19 @@ class NeuraPipeline:
         input_dim = X_transformed.shape[1]
         output_dim = targets.shape[1]
 
-        self._log_setup(input_dim, output_dim)
-
         self.model = DeepNeuralNetwork(
             config=self.cfg,
             layer_sizes=[input_dim] + self.cfg.hidden_layers + [output_dim],
         )
+
+        arch_log = self._get_arch_string(input_dim, output_dim)
+
+        ctx = ExperimentContext(
+            experiment_name=self.experiment_name,
+            architecture_log=arch_log,
+        )
+
+        self._log_setup(ctx)
 
         # 4. Training
         fit(
@@ -89,6 +97,7 @@ class NeuraPipeline:
             inputs=X_transformed,
             targets=targets,
             cfg=self.cfg,
+            ctx=ctx,
             X_raw=X_raw,
             scaler=self.scaler,
             engine=self.engine,

@@ -2,8 +2,8 @@ import logging
 import os
 import subprocess
 
-from src.config import NeuraConfig
 from src.pipeline import NeuraPipeline
+from src.structures import NeuraConfig
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -18,24 +18,26 @@ def main() -> None:
     logging.info("Hello, NeuraKitten! Initializing pipeline...\n")
 
     cfg = NeuraConfig(
-        epochs=501,
-        hidden_layers=[32, 16, 16, 16, 16, 32],
-        samples=1800,
-        batch_size=90,
+        epochs=101,
+        hidden_layers=[16, 16, 16],
+        samples=2000,
+        batch_size=25,
         balanced_batches=True,
-        data_mode="multidonut",
-        mdonut_radii=[4, 3.5, 2, 1.9, 1.7, 1, 0.5],
-        mdonut_r_evenly_dist=True,
-        feature_mode="cartesian",
-        initial_lr=0.001,
+        data_mode="spirals",  # "multidonut", "spirals", "rhodonea"
+        spiral_max_radius=1,
+        spiral_num_classes=5,
+        spiral_turns=3,
+        noise=0.03,
+        feature_mode="polar",
+        initial_lr=0.002,
         decay_rate=0.01,
         use_interaction=False,
         use_squares=False,
         use_trig=False,
-        view_range=5,
+        view_range=1.2,
     )
 
-    pipeline = NeuraPipeline(cfg)
+    pipeline = NeuraPipeline("Test 1", cfg)
     pipeline.run()
 
 
