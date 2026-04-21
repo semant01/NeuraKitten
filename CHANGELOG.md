@@ -3,6 +3,23 @@
 All notable changes to the "NeuraKitten" project will be documented in this file.  
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [2.3.0] - 2026-04-21
+
+### Added
+- Integrated Fisher's Iris dataset via `sklearn.datasets` into the `DataFactory` class.
+- Developed an internal `_manual_pca` method using eigenvector decomposition for 2D dimensionality reduction, providing an alternative to `sklearn.decomposition`.
+- Added `x_min/max` and `y_min/max` parameters to `NeuraConfig` for adaptive visualization boundaries.
+- Added `vis_axes` parameter to `NeuraConfig` for visualization of selected axis.
+
+### Changed
+- Refactored `visualization.py` to utilize dynamic coordinate bounds instead of a fixed view_range.
+- Optimized `requirements.txt` to include `scikit-learn` while removing redundant sub-dependencies.
+
+### Fixed
+- Fixed an issue where data points outside the `data_range` were not rendered on the main chart.
+
+
 ## [2.2.0] - 2026-04-21
 
 ### Added

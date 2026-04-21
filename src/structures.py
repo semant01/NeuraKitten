@@ -63,6 +63,9 @@ class NeuraConfig:
     rhodonea_num_classes: int = 1  # Number of classes in addition to background class
     rhodonea_r_evenly_dist: bool = False
 
+    #       Iris
+    iris_pca: bool = True  # Principal Component Analysis
+
     # --- Feature Engineering ---
     feature_mode: str = "polar"  # "cartesian", "polar"
     use_squares: bool = False
@@ -75,7 +78,12 @@ class NeuraConfig:
     # --- UI / UX / Visualization ---
     visualize: bool = True
     resolution: int = 300
-    view_range: float = 1.5
+    vis_axes: tuple[int, int] = (0, 1)  # Feature indices for drawing on X and Y axes
+    x_min: float = -1.5
+    x_max: float = 1.5
+    y_min: float = -1.5
+    y_max: float = 1.5
+
     cmap: str = "CMRmap"
     #     cmap options:  "gist_stern", "tab20c", "CMRmap", "nipy_spectral" ,"gnuplot2"
     show_dataset_points: bool = True

@@ -18,23 +18,21 @@ def main() -> None:
     logging.info("Hello, NeuraKitten! Initializing pipeline...\n")
 
     cfg = NeuraConfig(
-        epochs=101,
-        hidden_layers=[16, 16, 16],
-        samples=2000,
-        batch_size=25,
+        epochs=251,
+        hidden_layers=[3, 3],
+        # samples=2000,
+        batch_size=12,
         balanced_batches=True,
-        data_mode="spirals",  # "multidonut", "spirals", "rhodonea"
-        spiral_max_radius=1,
-        spiral_num_classes=5,
-        spiral_turns=3,
-        noise=0.03,
-        feature_mode="polar",
-        initial_lr=0.002,
+        data_mode="iris",
+        iris_pca=False,
+        feature_mode="cartesian",
+        initial_lr=0.005,
         decay_rate=0.01,
         use_interaction=False,
         use_squares=False,
         use_trig=False,
-        view_range=1.2,
+        visualize=True,
+        vis_axes=(2, 3),
     )
 
     pipeline = NeuraPipeline("Test 1", cfg)

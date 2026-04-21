@@ -15,11 +15,12 @@ if TYPE_CHECKING:
 
 
 def _create_decision_mesh(
-    cfg: "NeuraConfig", engine: "FeatureEngine", scaler: "DataScaler"
+    X_raw: np.ndarray, cfg: "NeuraConfig", engine: "FeatureEngine", scaler: "DataScaler"
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Create a transformed grid for decision boundary plotting.
 
     Args:
+        X_raw: Original input features.
         cfg: Configuration object for range and resolution.
         engine: Feature engine for data transformation.
         scaler: Scaler for data normalization.
@@ -28,15 +29,28 @@ def _create_decision_mesh(
         A tuple of (xx, yy, scaled_grid) where xx, yy are meshgrid matrices.
 
     """
-    view_range = cfg.view_range
-    res = cfg.resolution
-
-    x_vals = np.linspace(-view_range, view_range, res)
-    y_vals = np.linspace(-view_range, view_range, res)
+    x_vals = np.linspace(cfg.x_min, cfg.x_max, cfg.resolution)
+    y_vals = np.linspace(cfg.y_min, cfg.y_max, cfg.resolution)
     xx, yy = np.meshgrid(x_vals, y_vals)
 
     # Prepare grid for prediction
-    raw_grid = np.c_[xx.ravel(), yy.ravel()]
+    grid_2d = np.c_[xx.ravel(), yy.ravel()]
+    ax_x, ax_y = cfg.vis_axes
+
+    if X_raw.shape[1] > 2:
+        # 1. Use mean data if more than 2 feature columns
+        X_mean = np.mean(X_raw, axis=0)
+
+        # 2. (N, total_dims)
+        full_grid = np.tile(X_mean, (grid_2d.shape[0], 1))
+
+        # 3. replace first two columns with 2D grid
+        full_grid[:, ax_x] = grid_2d[:, 0]
+        full_grid[:, ax_y] = grid_2d[:, 1]
+        raw_grid = full_grid
+    else:
+        raw_grid = grid_2d
+
     extended_grid = engine.transform(raw_grid)
     scaled_grid = scaler.transform(extended_grid)
 
@@ -63,7 +77,7 @@ def live_plot(
         cfg: Centralized configuration object.
         engine: Feature engineering engine for data transformation.
         scaler: Scaler used for data normalization.
-        X_raw: Original input features (Cartesian), shape (N, 2).
+        X_raw: Original input features (Cartesian).
         targets: One-hot encoded labels for the dataset.
         ctx (ExperimentContext): Experiment parameters to be used for logging
         ax_main: Matplotlib axes object to show visualization.
@@ -75,7 +89,7 @@ def live_plot(
     ax_main.clear()
 
     # 1. Prepare grid and prediction
-    xx, yy, scaled_grid = _create_decision_mesh(cfg, engine, scaler)
+    xx, yy, scaled_grid = _create_decision_mesh(X_raw, cfg, engine, scaler)
 
     # 2. Get prediction
     preds = brain.predict(scaled_grid)
@@ -89,23 +103,23 @@ def live_plot(
     ax_main.contourf(xx, yy, zz, levels=levels, cmap=cfg.cmap, alpha=0.4)
 
     # 4. Plot dataset
+    ax_x, ax_y = cfg.vis_axes
     if cfg.show_dataset_points and X_raw is not None:
         ax_main.scatter(
-            X_raw[:, 0],
-            X_raw[:, 1],
+            X_raw[:, ax_x],
+            X_raw[:, ax_y],
             c=plot_targets,
             s=15,
             cmap=cfg.cmap,
             edgecolors="white",
             linewidth=0.5,
-            alpha=0.7,
+            alpha=1,
         )
 
     # 5. Configure plot
-    view_range = cfg.view_range
-    ax_main.set_xlim(-view_range, view_range)
-    ax_main.set_ylim(-view_range, view_range)
-    ax_main.set_aspect("equal")
+    ax_main.set_xlim(cfg.x_min, cfg.x_max)
+    ax_main.set_ylim(cfg.y_min, cfg.y_max)
+    ax_main.set_aspect("auto")  # "auto" "equal"
 
     # 6. Info text box
     ax_info.clear()

@@ -2,6 +2,7 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 import numpy as np
+from sklearn.datasets import load_iris
 
 if TYPE_CHECKING:
     from src.structures import NeuraConfig
@@ -139,76 +140,6 @@ class NeuraDataLoader:
         return int(np.ceil(len(self.inputs) / self.batch_size))
 
 
-class FeatureEngine:
-    """Component for coordinate transformation and feature expansion.
-
-    This class implements various feature engineering techniques, including
-    Cartesian to Polar coordinate conversion, polynomial expansions,
-    and trigonometric features to enhance the model's ability to learn
-    complex decision boundaries.
-
-    Attributes:
-        cfg (NeuraConfig): Configuration object containing feature mode
-            and expansion flags.
-
-    """
-
-    def __init__(self, cfg: NeuraConfig) -> None:
-        """Initialize the FeatureEngine with specific configuration settings.
-
-        Args:
-            cfg (NeuraConfig): Configuration instance holding feature
-                engineering hyperparameters.
-
-        """
-        self.cfg = cfg
-
-    def transform(self, X_raw: np.ndarray) -> np.ndarray:
-        """Apply feature transformations to the raw input data.
-
-        Args:
-            X_raw (np.ndarray): Raw input coordinates of shape (N, 2).
-
-        Returns:
-            np.ndarray: Transformed and expanded feature matrix.
-
-        """
-        feature_mode = self.cfg.feature_mode
-
-        use_squares = self.cfg.use_squares
-        use_interaction = self.cfg.use_interaction
-        use_trig = self.cfg.use_trig
-
-        x1: np.ndarray = X_raw[:, 0:1]
-        x2: np.ndarray = X_raw[:, 1:2]
-
-        if feature_mode == "cartesian":
-            features = [X_raw]
-
-            if use_squares:
-                features += [x1**2, x2**2]
-
-            if use_interaction:
-                features += [x1 * x2]
-
-            if use_trig:
-                features += [np.sin(x1), np.cos(x1), np.sin(x2), np.cos(x2)]
-
-            return np.hstack(features)
-
-        elif feature_mode == "polar":
-            # polar coordinates use radius and Sin and Cos for smooth approximation
-            r: np.ndarray = np.sqrt(x1**2 + x2**2)
-            phi: np.ndarray = np.arctan2(x2, x1)
-            sn: np.ndarray = np.sin(phi)
-            cs: np.ndarray = np.cos(phi)
-
-            return np.hstack([r, sn, cs])
-
-        else:
-            raise ValueError("Unknown Feature Mode")
-
-
 class DataFactory:
     """Generator for synthetic multi-class datasets.
 
@@ -252,6 +183,8 @@ class DataFactory:
             return self.generate_spirals()
         elif mode == "rhodonea":
             return self.generate_rhodonea()
+        elif mode == "iris":
+            return self.generate_iris()
         else:
             raise ValueError(f"Unknown Data Mode: {mode}")
 
@@ -374,6 +307,31 @@ class DataFactory:
 
         return self._shuffle_and_return(X, y_one_hot)
 
+    def generate_iris(self) -> tuple[np.ndarray, np.ndarray]:
+        """Load and prepare the classic Fisher's Iris dataset.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Features (X) and one-hot encoded targets (y).
+
+        """
+        # iris.data — matrix (150, 4), iris.target — vector (150,)
+        data_raw, labels_raw = load_iris(return_X_y=True)
+
+        X: np.ndarray = np.array(data_raw)
+        y_labels: np.ndarray = np.array(labels_raw)
+
+        if self.cfg.iris_pca:
+            X = self._manual_pca(X, n_components=2)
+            # X = pca.fit_transform(X) # using PCA from sklearn.decomposition
+
+        # One-Hot
+        num_classes = len(np.unique(y_labels))
+        y = np.eye(num_classes)[y_labels]
+
+        X = self._apply_noise(X)
+
+        return self._shuffle_and_return(X, y)
+
     def _generate_random_polar(
         self, max_radius: float, evenly_dist: bool
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -424,6 +382,108 @@ class DataFactory:
         """
         indices = self.rng.permutation(len(X))
         return X[indices], y[indices]
+
+    def _manual_pca(self, X: np.ndarray, n_components: int = 2) -> np.ndarray:
+        """Implement of PCA via eigenvectors (manual approach).
+
+        Args:
+            X (np.ndarray): The input feature matrix.
+            n_components (int): Required number of components
+
+        Returns:
+            np.ndarray: Corrected with PCA data
+
+        """
+        # 1. Mean Subtraction
+        X_centered = X - np.mean(X, axis=0)
+
+        # 2. Covariance matrix, rowvar=False is to use columns
+        cov_matrix = np.cov(X_centered, rowvar=False)
+
+        # 3. Find eigenvalues and eigenvectors
+        eigen_values, eigen_vectors = np.linalg.eigh(cov_matrix)
+
+        # 4. Sort by component strength (descending)
+        sorted_index = np.argsort(eigen_values)[::-1]
+        sorted_eigenvectors = eigen_vectors[:, sorted_index]
+
+        # 5. Use n_components
+        eigenvector_subset = sorted_eigenvectors[:, :n_components]
+
+        # 6. Data onto a New Basis
+        X_reduced = np.dot(X_centered, eigenvector_subset)
+
+        return X_reduced
+
+
+class FeatureEngine:
+    """Component for coordinate transformation and feature expansion.
+
+    This class implements various feature engineering techniques, including
+    Cartesian to Polar coordinate conversion, polynomial expansions,
+    and trigonometric features to enhance the model's ability to learn
+    complex decision boundaries.
+
+    Attributes:
+        cfg (NeuraConfig): Configuration object containing feature mode
+            and expansion flags.
+
+    """
+
+    def __init__(self, cfg: NeuraConfig) -> None:
+        """Initialize the FeatureEngine with specific configuration settings.
+
+        Args:
+            cfg (NeuraConfig): Configuration instance holding feature
+                engineering hyperparameters.
+
+        """
+        self.cfg = cfg
+
+    def transform(self, X_raw: np.ndarray) -> np.ndarray:
+        """Apply feature transformations to the raw input data.
+
+        Args:
+            X_raw (np.ndarray): Raw input coordinates of shape (N, 2).
+
+        Returns:
+            np.ndarray: Transformed and expanded feature matrix.
+
+        """
+        feature_mode = self.cfg.feature_mode
+
+        use_squares = self.cfg.use_squares
+        use_interaction = self.cfg.use_interaction
+        use_trig = self.cfg.use_trig
+
+        x1: np.ndarray = X_raw[:, 0:1]
+        x2: np.ndarray = X_raw[:, 1:2]
+
+        if feature_mode == "cartesian":
+            features = [X_raw]
+
+            if use_squares:
+                features += [x1**2, x2**2]
+
+            if use_interaction:
+                features += [x1 * x2]
+
+            if use_trig:
+                features += [np.sin(x1), np.cos(x1), np.sin(x2), np.cos(x2)]
+
+            return np.hstack(features)
+
+        elif feature_mode == "polar":
+            # polar coordinates use radius and Sin and Cos for smooth approximation
+            r: np.ndarray = np.sqrt(x1**2 + x2**2)
+            phi: np.ndarray = np.arctan2(x2, x1)
+            sn: np.ndarray = np.sin(phi)
+            cs: np.ndarray = np.cos(phi)
+
+            return np.hstack([r, sn, cs])
+
+        else:
+            raise ValueError("Unknown Feature Mode")
 
 
 class DataScaler:
