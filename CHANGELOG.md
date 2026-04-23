@@ -4,6 +4,11 @@ All notable changes to the "NeuraKitten" project will be documented in this file
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.3.1] 2026-04-23
+### Fixed
+- Fixed visualization bug with x_min/max and y_min/max calculation in `pipeline.py`.
+
+
 ## [2.3.0] - 2026-04-21
 
 ### Added

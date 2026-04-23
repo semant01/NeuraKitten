@@ -70,12 +70,13 @@ class NeuraPipeline:
         X_raw, targets = self.factory.generate()
 
         # - Update visualization range parameters to fit X_raw data
-        ax_x, ax_y = self.cfg.vis_axes
-        padding = 0.5
-        self.cfg.x_min = float(X_raw[:, ax_x].min() - padding)
-        self.cfg.x_max = float(X_raw[:, ax_x].max() - padding)
-        self.cfg.y_min = float(X_raw[:, ax_y].min() - padding)
-        self.cfg.y_max = float(X_raw[:, ax_y].max() - padding)
+        if self.cfg.visual_range_auto:
+            ax_x, ax_y = self.cfg.vis_axes
+            padding = self.cfg.padding
+            self.cfg.x_min = float(X_raw[:, ax_x].min() - padding)
+            self.cfg.x_max = float(X_raw[:, ax_x].max() + padding)
+            self.cfg.y_min = float(X_raw[:, ax_y].min() - padding)
+            self.cfg.y_max = float(X_raw[:, ax_y].max() + padding)
 
         # 2. Transformation & Scaling
         X_featured = self.engine.transform(X_raw)

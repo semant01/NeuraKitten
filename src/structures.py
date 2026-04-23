@@ -32,7 +32,7 @@ class NeuraConfig:
     # --- Data Generation ---
     samples: int = 2048
     noise: float = 0
-    data_mode: str = "multidonut"  # "multidonut", "spirals", "rhodonea"
+    data_mode: str = "multidonut"  # "multidonut", "spirals", "rhodonea", "iris"
 
     #       Multi-donut
     mdonut_radii: list[float] = field(
@@ -79,10 +79,12 @@ class NeuraConfig:
     visualize: bool = True
     resolution: int = 300
     vis_axes: tuple[int, int] = (0, 1)  # Feature indices for drawing on X and Y axes
-    x_min: float = -1.5
-    x_max: float = 1.5
-    y_min: float = -1.5
-    y_max: float = 1.5
+    x_min: float = -1.5  # will be re-calculated automatically when visual_range_auto
+    x_max: float = 1.5  # will be re-calculated automatically when visual_range_auto
+    y_min: float = -1.5  # will be re-calculated automatically when visual_range_auto
+    y_max: float = 1.5  # will be re-calculated automatically when visual_range_auto
+    visual_range_auto: bool = True  # auto-adjusting of x_min/max and y_min/max
+    padding: float = 0.5
 
     cmap: str = "CMRmap"
     #     cmap options:  "gist_stern", "tab20c", "CMRmap", "nipy_spectral" ,"gnuplot2"
