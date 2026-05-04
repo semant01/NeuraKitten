@@ -1,17 +1,21 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Tuple
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.axes import Axes
 
 matplotlib.use("TkAgg")
 
 if TYPE_CHECKING:
-    from src.structures import ExperimentContext, NeuraConfig
+    import matplotlib.backend_bases
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
     from .data_utils import DataScaler, FeatureEngine
     from .model import DeepNeuralNetwork
+    from .structures import ExperimentContext, NeuraConfig
 
 
 def _create_decision_mesh(
@@ -27,6 +31,8 @@ def _create_decision_mesh(
 
     Returns:
         A tuple of (xx, yy, scaled_grid) where xx, yy are meshgrid matrices.
+
+    This is a heavy operation that should be called once per experiment.
 
     """
     x_vals = np.linspace(cfg.x_min, cfg.x_max, cfg.resolution)
@@ -57,131 +63,184 @@ def _create_decision_mesh(
     return xx, yy, scaled_grid
 
 
-def live_plot(
-    brain: "DeepNeuralNetwork",
-    cfg: "NeuraConfig",
-    engine: "FeatureEngine",
-    scaler: "DataScaler",
-    X_raw: np.ndarray,
-    targets: np.ndarray,
-    ctx: "ExperimentContext",
-    ax_main: Axes,
-    ax_loss: Axes,
-    ax_acc: Axes,
-    ax_info: Axes,
-) -> None:
-    """Update the live visualization of the neural network's decision boundary.
+class VisualizerEngine:
+    """High-performance rendering engine for neural network training progress.
 
-    Args:
-        brain: The trained neural network model instance.
-        cfg: Centralized configuration object.
-        engine: Feature engineering engine for data transformation.
-        scaler: Scaler used for data normalization.
-        X_raw: Original input features (Cartesian).
-        targets: One-hot encoded labels for the dataset.
-        ctx (ExperimentContext): Experiment parameters to be used for logging
-        ax_main: Matplotlib axes object to show visualization.
-        ax_loss: Matplotlib axes object to show loss chart.
-        ax_acc: Matplotlib axes object to show accuracy chart.
-        ax_info: Matplotlib axes object to show text info.
-
+    It pre-calculates the decision mesh and manages the matplotlib figure state,
+    avoiding redundant computations during the training loop.
     """
-    ax_main.clear()
 
-    # 1. Prepare grid and prediction
-    xx, yy, scaled_grid = _create_decision_mesh(X_raw, cfg, engine, scaler)
+    def __init__(
+        self,
+        cfg: NeuraConfig,
+        engine: FeatureEngine,
+        scaler: DataScaler,
+        X_raw: np.ndarray,
+        targets: np.ndarray,
+    ) -> None:
+        """Initialize the engine and prepare static data.
 
-    # 2. Get prediction
-    preds = brain.predict(scaled_grid)
-    zz = np.argmax(preds, axis=1).reshape(xx.shape)
+        Args:
+            cfg: Centralized configuration object.
+            engine: Feature engineering component.
+            scaler: Data normalization component.
+            X_raw: Original input features for scatter plotting.
+            targets: One-hot encoded labels.
 
-    num_classes = preds.shape[1]
-    plot_targets = np.argmax(targets, axis=1)
+        """
+        self.cfg = cfg
+        self.X_raw = X_raw
+        self.targets = targets
+        self.plot_targets = np.argmax(targets, axis=1)
 
-    # 3. Plot Decision Boundaries
-    levels = np.arange(num_classes + 1) - 0.5
-    ax_main.contourf(xx, yy, zz, levels=levels, cmap=cfg.cmap, alpha=0.4)
-
-    # 4. Plot dataset
-    ax_x, ax_y = cfg.vis_axes
-    if cfg.show_dataset_points and X_raw is not None:
-        ax_main.scatter(
-            X_raw[:, ax_x],
-            X_raw[:, ax_y],
-            c=plot_targets,
-            s=15,
-            cmap=cfg.cmap,
-            edgecolors="white",
-            linewidth=0.5,
-            alpha=1,
+        # 1. Pre-calculate the mesh
+        self.xx, self.yy, self.scaled_grid = _create_decision_mesh(
+            X_raw, cfg, engine, scaler
         )
 
-    # 5. Configure plot
-    ax_main.set_xlim(cfg.x_min, cfg.x_max)
-    ax_main.set_ylim(cfg.y_min, cfg.y_max)
-    ax_main.set_aspect("auto")  # "auto" "equal"
+        # 2. Setup Figure and Axes
+        self.fig: Figure = plt.figure(figsize=(14, 8))
+        self.gs = self.fig.add_gridspec(
+            2, 3, wspace=0.3, hspace=0.3, width_ratios=[1, 1, 1.5]
+        )
 
-    # 6. Info text box
-    ax_info.clear()
-    ax_info.axis("off")
-    info_text = (
-        f"METRICS\n{'-' * 42}\n"
-        f"Epoch:      {ctx.epoch:4d} /{cfg.epochs:4d}\n"
-        f"Loss:       {ctx.loss:.6f}\n"
-        f"Accuracy:   {ctx.accuracy:.2f}%\n"
-        f"LR:         {ctx.lr:.6f}\n\n"
-        f"CONFIG\n{'-' * 42}\n"
-        f"Model:      {ctx.architecture_log}\n"
-        f"Mode:       {cfg.data_mode}\n"
-        f"Features:   {cfg.feature_mode}\n"
-        f"Noise:      {cfg.noise}"
-    )
-    ax_info.text(
-        0.05,
-        0.95,
-        info_text,
-        transform=ax_info.transAxes,
-        verticalalignment="top",
-        family="monospace",
-        fontsize=9,
-    )
+        self.ax_main: Axes = self.fig.add_subplot(self.gs[:, :2])
+        self.ax_loss: Axes = self.fig.add_subplot(self.gs[0, 2])
+        self.ax_acc: Axes = self.ax_loss.twinx()
+        self.ax_info: Axes = self.fig.add_subplot(self.gs[1, 2])
+        self.ax_info.tick_params(
+            axis="both",
+            which="both",
+            bottom=False,
+            top=False,
+            left=False,
+            right=False,
+            labelbottom=False,
+            labelleft=False,
+        )
+        self.ax_info.axis("off")
 
-    # 7. Loss and Accuracy charts
-    ax_loss.clear()
+        # 3. Handle Interactive Events
+        self.stop_requested: bool = False
+        self.paused: bool = False
 
-    line_loss = ax_loss.plot(
-        ctx.loss_history, color="#e74c3c", linewidth=1.5, label="Loss"
-    )
-    ax_loss.set_ylabel("Loss", color="#e74c3c")
-    ax_loss.tick_params(axis="y", labelcolor="#e74c3c")
-    ax_loss.set_ylim(0, max(ctx.loss_history) * 1.1 if ctx.loss_history else 1.0)
-    ax_loss.set_yscale("linear")
+        self.fig.canvas.mpl_connect("close_event", self._on_close)
+        self.fig.canvas.mpl_connect("key_press_event", self._on_key)
 
-    ax_acc.clear()
-    line_acc = ax_acc.plot(
-        ctx.acc_history, color="#3498db", linewidth=1.5, label="Accuracy"
-    )
-    ax_acc.set_ylabel("Accuracy (%)", color="#3498db")
-    ax_acc.yaxis.set_label_position("right")
-    ax_acc.tick_params(axis="y", labelcolor="#3498db")
-    ax_acc.set_ylim(0, 105)
-    ax_loss.set_yscale("linear")
+        plt.ion()  # Turn on interactive mode
+        plt.show(block=False)
 
-    lines = line_loss + line_acc
-    labels = [str(label.get_label()) for label in lines]
-    ax_loss.legend(
-        lines,
-        labels,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.25),
-        ncol=2,
-        fontsize="small",
-        frameon=False,
-    )
+    def _on_close(self, event: matplotlib.backend_bases.Event) -> None:
+        """Handle window close event."""
+        self.stop_requested = True
 
-    ax_loss.set_title("Learning Progress", fontsize=10)
-    ax_loss.grid(True, alpha=0.2)
+    def _on_key(self, event: matplotlib.backend_bases.Event) -> None:
+        """Handle key press events for manual interruption."""
+        if isinstance(event, matplotlib.backend_bases.KeyEvent):
+            if event.key == "escape":
+                self.stop_requested = True
+            elif event.key in [" ", "p", "P"]:
+                self.paused = not self.paused
 
-    # Update screen
-    plt.draw()
-    plt.pause(0.001)
+    def render(self, brain: DeepNeuralNetwork, ctx: ExperimentContext) -> None:
+        """Perform a single rendering pass of the current model state.
+
+        Args:
+            brain: The neural network instance for inference.
+            ctx: Current experiment context with metrics and history.
+
+        """
+        # --- 1. Decision Boundary ---
+        self.ax_main.clear()
+
+        preds = brain.predict(self.scaled_grid)
+        zz = np.argmax(preds, axis=1).reshape(self.xx.shape)
+        num_classes = preds.shape[1]
+
+        levels = np.arange(num_classes + 1) - 0.5
+        self.ax_main.contourf(
+            self.xx, self.yy, zz, levels=levels, cmap=self.cfg.cmap, alpha=0.4
+        )
+
+        # --- 2. Dataset Points ---
+        if self.cfg.show_dataset_points:
+            ax_x, ax_y = self.cfg.vis_axes
+            self.ax_main.scatter(
+                self.X_raw[:, ax_x],
+                self.X_raw[:, ax_y],
+                c=self.plot_targets,
+                s=15,
+                cmap=self.cfg.cmap,
+                edgecolors="white",
+                linewidth=0.5,
+            )
+        self.ax_main.set_xlim(self.cfg.x_min, self.cfg.x_max)
+        self.ax_main.set_ylim(self.cfg.y_min, self.cfg.y_max)
+        self.ax_main.set_title(f"Decision Boundary (Epoch {ctx.epoch})")
+
+        # --- 3. Info Panel ---
+        self.ax_info.clear()
+        # self.ax_info.axis("off")
+        info_text = (
+            f"METRICS\n{'-' * 30}\n"
+            f"Epoch:    {ctx.epoch:4d} / {self.cfg.epochs}\n"
+            f"Loss:     {ctx.loss:.6f}\n"
+            f"Accuracy: {ctx.accuracy:.2f}%\n"
+            f"LR:       {ctx.lr:.6f}\n\n"
+            f"CONFIG\n{'-' * 30}\n"
+            f"Data:     {self.cfg.data_mode}\n"
+            f"Features: {self.cfg.feature_mode}\n"
+            f"Arch:     {ctx.architecture_log}\n"
+            f"Seed:     {self.cfg.seed}"
+        )
+        self.ax_info.text(
+            0.05,
+            0.95,
+            info_text,
+            transform=self.ax_info.transAxes,
+            va="top",
+            family="monospace",
+            fontsize=9,
+        )
+
+        # --- 4. Learning Curves ---
+        self._render_metrics(ctx)
+
+        # --- 5. Update Screen ---
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.start_event_loop(0.001)
+
+    def _render_metrics(self, ctx: ExperimentContext) -> None:
+        """Render loss and accuracy charts on a twin-axis plot."""
+        if not ctx.metrics:
+            return
+
+        self.ax_loss.clear()
+        self.ax_acc.clear()
+
+        epochs = [frame.epoch for frame in ctx.metrics]
+        losses = [frame.loss for frame in ctx.metrics]
+        accuracies = [frame.accuracy for frame in ctx.metrics]
+
+        (line1,) = self.ax_loss.plot(
+            epochs, losses, color="#e74c3c", label="Loss", linewidth=1.5
+        )
+        self.ax_loss.set_ylabel("Loss", color="#e74c3c", fontsize=10, labelpad=5)
+        self.ax_loss.tick_params(axis="y", labelcolor="#e74c3c")
+        self.ax_loss.grid(True, alpha=0.3)
+
+        (line2,) = self.ax_acc.plot(
+            epochs, accuracies, color="#2ecc71", label="Accuracy", linewidth=1.5
+        )
+        self.ax_acc.set_ylabel("Accuracy %", color="#2ecc71", fontsize=10, labelpad=5)
+        self.ax_acc.tick_params(axis="y", labelcolor="#2ecc71")
+        self.ax_acc.yaxis.set_label_position("right")
+        self.ax_acc.yaxis.tick_right()
+
+        self.ax_acc.set_ylim(0, 105)
+
+        self.ax_loss.set_title("Training Progress", fontsize=12, pad=10)
+
+    def close(self) -> None:
+        """Close the visualization window."""
+        plt.close(self.fig)

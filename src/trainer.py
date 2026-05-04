@@ -1,195 +1,79 @@
-import logging
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
-import matplotlib
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.backend_bases import Event, KeyEvent
-
-from .data_utils import NeuraDataLoader
-from .visualization import live_plot
-
-matplotlib.use("TkAgg")
 
 if TYPE_CHECKING:
-    from src.structures import ExperimentContext, NeuraConfig
-
-    from .data_utils import DataScaler, FeatureEngine
+    from .callbacks import BaseCallback
     from .model import DeepNeuralNetwork
+    from .optimizer import AdamOptimizer
+    from .structures import ExperimentContext, NeuraConfig
 
 
-def _calculate_accuracy(predictions: np.ndarray, targets: np.ndarray) -> float:
-    """Compute the accuracy percentage between predictions and ground truth.
+class Trainer:
+    """Orchestrator for the neural network training process.
 
-    Args:
-        predictions (np.ndarray): Probability matrix from the model.
-        targets (np.ndarray): One-hot encoded target labels.
-
-    Returns:
-        float: Accuracy percentage (0.0 to 100.0).
-
+    This class binds the model, optimizer, and configuration together,
+    managing the execution of the training loop and callback notifications.
     """
-    pred_labels = np.argmax(predictions, axis=1)
-    true_labels = np.argmax(targets, axis=1)
-    return float(np.mean(pred_labels == true_labels) * 100)
 
+    def __init__(
+        self, model: DeepNeuralNetwork, optimizer: AdamOptimizer, cfg: NeuraConfig
+    ) -> None:
+        """Initialize the trainer with the core components.
 
-def _get_current_lr(
-    initial_lr: float, decay_rate: float, epoch: int, min_lr: float
-) -> float:
-    """Calculate the decayed learning rate for the current epoch.
+        Args:
+            model: The neural network instance.
+            optimizer: The optimizer (e.g., Adam).
+            cfg: Centralized configuration object.
 
-    Args:
-        initial_lr (float): Starting learning rate.
-        decay_rate (float): Rate of decay per epoch.
-        epoch (int): Current epoch number.
-        min_lr (float): Minimum allowed learning rate.
+        """
+        self.model = model
+        self.optimizer = optimizer
+        self.cfg = cfg
 
-    Returns:
-        float: Adjusted learning rate.
+    def fit(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        ctx: ExperimentContext,
+        callbacks: list[BaseCallback] | None = None,
+    ) -> None:
+        """Execute the training loop and notify observers of progress.
 
-    """
-    lr = initial_lr / (1 + decay_rate * epoch)
-    return max(lr, min_lr)
+        Args:
+            X_train: Preprocessed input features.
+            y_train: One-hot encoded labels.
+            ctx: Centralized context for storing metrics and history.
+            callbacks: Optional list of hooks for logging, saving, and UI.
 
+        """
+        callbacks = callbacks or []
+        if hasattr(self.model, "train"):
+            self.model.train()
 
-def fit(
-    model: "DeepNeuralNetwork",
-    inputs: np.ndarray,
-    targets: np.ndarray,
-    cfg: "NeuraConfig",
-    ctx: "ExperimentContext",
-    X_raw: np.ndarray,
-    scaler: "DataScaler",
-    engine: "FeatureEngine",
-) -> "DeepNeuralNetwork":
-    """Trains the Deep Neural Network using Mini-batch Gradient Descent and ADAM.
+        # 1. Signal training start
+        for cb in callbacks:
+            cb.on_train_begin(self.model, ctx)
 
-    Handles the training loop, learning rate scheduling, logging, and
-    interactive visualization (pause/stop via keyboard).
+        for epoch in range(1, self.cfg.epochs + 1):
+            # 2. Mathematical core: Training step
+            loss, g_w, g_b = self.model.train_step(X_train, y_train)
+            self.optimizer.step(self.model.weights, self.model.biases, g_w, g_b)
 
-    Args:
-        model (DeepNeuralNetwork): The neural network instance to train.
-        inputs (np.ndarray): Preprocessed training features.
-        targets (np.ndarray): Target labels (one-hot encoded).
-        cfg (NeuraConfig): Configuration object with hyperparameters.
-        ctx (ExperimentContext): Experiment parameters to be used for logging
-        X_raw (np.ndarray): Original features for visualization purposes.
-        scaler (DataScaler): Scaler used for data normalization.
-        engine (FeatureEngine): Engine used for feature mapping.
+            # 3. State update: Metrics calculation
+            accuracy = self.model.calculate_accuracy(X_train, y_train)
+            ctx.update_metrics(epoch, loss, accuracy, self.optimizer.lr)
 
-    Returns:
-        DeepNeuralNetwork: The trained model instance.
+            # 4. Observer notification: Epoch end
+            for cb in callbacks:
+                cb.on_epoch_end(epoch, self.model, ctx)
 
-    """
-    state: dict[str, bool] = {"paused": False, "stop": False}
-
-    fig, ax_main, ax_loss, ax_info = None, None, None, None
-
-    if cfg.visualize:
-        plt.ion()
-        fig = plt.figure(figsize=(12, 7))
-        gs = gridspec.GridSpec(2, 2, width_ratios=[1.5, 1], height_ratios=[1, 1])
-
-        ax_main = fig.add_subplot(gs[:, 0])
-        ax_loss = fig.add_subplot(gs[0, 1])
-        ax_info = fig.add_subplot(gs[1, 1])
-        ax_acc = ax_loss.twinx()
-
-        ax_info.axis("off")
-
-        fig.suptitle(
-            f"Experiment: {ctx.experiment_name} | Data: {cfg.data_mode}",
-            fontsize=14,
-            fontweight="bold",
-        )
-        fig.tight_layout(rect=(0, 0.05, 0.95, 0.95))
-        fig.subplots_adjust(
-            left=0.1,
-            right=0.9,
-            top=0.88,
-            bottom=0.12,
-            wspace=0.4,
-            hspace=0.4,
-        )
-
-        def on_press(event: Event) -> None:
-            if not isinstance(event, KeyEvent):
-                return
-            if event.key == "p":
-                state["paused"] = not state["paused"]
-                status = "PAUSED" if state["paused"] else "RESUMED"
-                print(f"\n[Status] {status}")
-            if event.key == "escape":
-                state["stop"] = True
-                print("\n[Status] STOPPING...")
-
-        fig.canvas.mpl_connect("key_press_event", on_press)
-
-    loader: NeuraDataLoader = NeuraDataLoader(
-        inputs, targets, cfg.batch_size, balanced=cfg.balanced_batches, seed=cfg.seed
-    )
-
-    for epoch in range(cfg.epochs):
-        if cfg.visualize and state["stop"]:
-            break
-        while cfg.visualize and state["paused"]:
-            plt.pause(0.1)
-            if state["stop"]:
+            # 5. Control flow: Check for early stopping (e.g., ESC key)
+            if any(cb.should_stop for cb in callbacks):
                 break
 
-        # Update Learning Rate
-        lr = _get_current_lr(cfg.initial_lr, cfg.decay_rate, epoch, cfg.min_lr)
-
-        epoch_losses: list[float] = []
-
-        # Mini-batch training
-        for batch_indices in loader:
-            loss = model.train(inputs[batch_indices], targets[batch_indices], lr)
-            epoch_losses.append(loss)
-
-        current_loss = float(np.mean(epoch_losses))
-
-        # Logging and plot visualization on demand and at the last epoch
-        is_log_frame = epoch % cfg.frame_log == 0 or epoch == cfg.epochs - 1
-        is_vis_frame = epoch % cfg.frame_visual == 0 or epoch == cfg.epochs - 1
-
-        if is_log_frame or is_vis_frame:
-            predictions = model.predict(inputs)
-            accuracy = _calculate_accuracy(predictions, targets)
-
-        ctx.update_metrics(epoch=epoch, loss=current_loss, accuracy=accuracy, lr=lr)
-
-        if is_log_frame:
-            logging.info(
-                f"Epoch: {epoch:4d} | Loss: {current_loss:.6f} | "
-                f"Acc: {accuracy:6.2f}% | LR: {lr:.6f}"
-            )
-
-        if (
-            cfg.visualize
-            and ax_main is not None
-            and ax_loss is not None
-            and ax_info is not None
-            and is_vis_frame
-        ):
-            live_plot(
-                brain=model,
-                cfg=cfg,
-                engine=engine,
-                scaler=scaler,
-                X_raw=X_raw,
-                targets=targets,
-                ctx=ctx,
-                ax_main=ax_main,
-                ax_loss=ax_loss,
-                ax_acc=ax_acc,
-                ax_info=ax_info,
-            )
-
-    if cfg.visualize:
-        plt.ioff()
-        plt.show()
-
-    return model
+        # 6. Signal training end
+        for cb in callbacks:
+            cb.on_train_end(self.model, ctx)

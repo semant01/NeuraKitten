@@ -4,6 +4,23 @@ All notable changes to the "NeuraKitten" project will be documented in this file
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.0.0-alpha] 2026-05-04
+
+### Added
+- Introduced a flexible event-driven architecture in `callbacks.py`, including specialized classes for console logging, real-time visualization, and automated data storage.
+- Added `storage.py` with the `ExperimentManager` class to handle systematic saving of checkpoints, configurations, and metadata.
+- Isolated optimization logic into a dedicated `AdamOptimizer` class in optimizer.py, decoupling it from the core model.
+- Added `MetricFrame` to `ExperimentContext` for structured historical data logging within `structures.py`.
+- Introduced new persistence and storage parameters to the `NeuraConfig` class.
+
+### Changed
+- Completely redesigned the training loop into a stateful `Trainer` class, now fully integrated with the new callback system.
+- Streamlined `model.py` by removing redundant optimization variables and delegating parameter updates to the `optimizer`.
+- Rewrote `visualization.py` into a high-performance `VisualizerEngine` class, optimized for callback-based rendering.  
+- Updated `NeuraPipeline` and `main.py` to support the new modular initialization and execution flow.
+
+
+
 ## [2.3.1] 2026-04-23
 ### Fixed
 - Fixed visualization bug with x_min/max and y_min/max calculation in `pipeline.py`.

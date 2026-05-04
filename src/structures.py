@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -17,7 +17,7 @@ class NeuraConfig:
     hidden_layers: list[int] = field(default_factory=lambda: [12, 12])
 
     # --- Hyperparameters & Training ---
-    epochs: int = 501
+    epochs: int = 500
     batch_size: int = 32
     balanced_batches: bool = True
     initial_lr: float = 0.001
@@ -46,12 +46,6 @@ class NeuraConfig:
     mdonut_r_evenly_dist: bool = False  # distribute evenly along the radius
     #                            or closer to the center
 
-    #       Donut
-    donut_r_inner: float = 0.3  # Inner radius
-    donut_r_outer: float = 0.7  # Outer radius
-    donut_r_evenly_dist: bool = False  # distribute evenly along the radius
-    #                            or closer to the center
-
     #       Spiral
     spiral_num_classes: int = 3
     spiral_turns: float = 2.5  # number of semi-turns
@@ -74,6 +68,11 @@ class NeuraConfig:
 
     # --- Data Scaling ---
     feature_range: tuple[float, float] = (-1, 1)
+
+    # --- Saving data ---
+    save_to_file: bool = True
+    checkpoint_interval: int = 50
+    output_dir: str = "experiments"
 
     # --- UI / UX / Visualization ---
     visualize: bool = True
@@ -98,19 +97,21 @@ class NeuraConfig:
 
 
 @dataclass
+class MetricFrame:
+    """A single record of experiment metrics at a specific point in time."""
+
+    epoch: int
+    loss: float
+    accuracy: float
+    lr: float
+
+
+@dataclass
 class ExperimentContext:
-    """Encapsulates the full state and configuration of a training experiment.
+    """Encapsulate the full state and configuration of a training experiment.
 
     This class acts as a centralized data hub, carrying both static configuration
     metadata and dynamic training metrics to be used by loggers and visualizers.
-
-    Attributes:
-        architecture_log (str): String representation of the NN structure.
-        epoch (int): Current training epoch.
-        loss (float): Current loss value.
-        accuracy (float): Current model accuracy (0.0 to 1.0).
-        lr (float): Current learning rate.
-
     """
 
     # Static Metadata
@@ -123,16 +124,20 @@ class ExperimentContext:
     accuracy: float = 0.0
     lr: float = 0.0
 
-    loss_history: list[float] = field(default_factory=list)
-    acc_history: list[float] = field(default_factory=list)
+    metrics: list[MetricFrame] = field(default_factory=list)
 
     def update_metrics(
         self, epoch: int, loss: float, accuracy: float, lr: float
     ) -> None:
-        """Update the running metrics and history of the experiment."""
+        """Update the running metrics and append a new frame to history."""
         self.epoch = epoch
         self.loss = loss
         self.accuracy = accuracy
         self.lr = lr
-        self.loss_history.append(loss)
-        self.acc_history.append(accuracy)
+
+        frame = MetricFrame(epoch=epoch, loss=loss, accuracy=accuracy, lr=lr)
+        self.metrics.append(frame)
+
+    def get_history_dicts(self) -> list[dict]:
+        """Return the history as a list of dictionaries, ready for JSON/Pandas."""
+        return [asdict(frame) for frame in self.metrics]

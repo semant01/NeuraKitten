@@ -12,10 +12,6 @@ class DeepNeuralNetwork:
 
     weights: list[np.ndarray]
     biases: list[np.ndarray]
-    m_w: list[np.ndarray]
-    v_w: list[np.ndarray]
-    m_b: list[np.ndarray]
-    v_b: list[np.ndarray]
 
     def __init__(self, config: NeuraConfig, layer_sizes: list[int]) -> None:
         """Initialize the network architecture and optimization parameters.
@@ -27,14 +23,22 @@ class DeepNeuralNetwork:
 
         """
         self.cfg = config
+        self.training = True
 
         # Reproducibility anchor.
         self.rng = np.random.default_rng(seed=self.cfg.seed)
 
         self.layer_sizes = layer_sizes
-        self.t = 0
 
         self._initialize_parameters()
+
+    def train(self) -> None:
+        """Set the model to training mode."""
+        self.training = True
+
+    def eval(self) -> None:
+        """Set the model to evaluation mode."""
+        self.training = False
 
     def _initialize_parameters(self) -> None:
         """Allocates memory and initializes weights, biases, and ADAM optimizer moments.
@@ -53,11 +57,6 @@ class DeepNeuralNetwork:
         self.weights: list[np.ndarray] = []
         self.biases: list[np.ndarray] = []
 
-        self.m_w: list[np.ndarray] = []
-        self.v_w: list[np.ndarray] = []
-        self.m_b: list[np.ndarray] = []
-        self.v_b: list[np.ndarray] = []
-
         for i in range(len(self.layer_sizes) - 1):
             n_in = self.layer_sizes[i]
             n_out = self.layer_sizes[i + 1]
@@ -70,12 +69,6 @@ class DeepNeuralNetwork:
             # Biases initialization
             b = np.zeros((n_out, 1))
             self.biases.append(b)
-
-            # ADAM moments initialization
-            self.m_w.append(np.zeros_like(w))
-            self.v_w.append(np.zeros_like(w))
-            self.m_b.append(np.zeros_like(b))
-            self.v_b.append(np.zeros_like(b))
 
     def leaky_relu(self, x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
         """Apply the Leaky Rectified Linear Unit activation function.
@@ -139,68 +132,82 @@ class DeepNeuralNetwork:
 
         return activations[-1].T
 
-    def train(self, inputs: np.ndarray, targets: np.ndarray, lr: float) -> float:
-        """Perform one training step using backpropagation and ADAM.
+    def calculate_accuracy(self, X: np.ndarray, y: np.ndarray) -> float:
+        """Calculate prediction accuracy percentage.
 
         Args:
-            inputs (np.ndarray): Batch of input features.
-            targets (np.ndarray): One-hot encoded target labels.
-            lr (float): Current learning rate.
+            X: Input features.
+            y: One-hot encoded target labels.
+
+        """
+        was_training = self.training
+        self.eval()
+
+        predictions = self.predict(X)
+        pred_labels = np.argmax(predictions, axis=1)
+        true_labels = np.argmax(y, axis=1)
+
+        accuracy = np.mean(pred_labels == true_labels) * 100.0
+
+        if was_training:
+            self.train()
+        return float(accuracy)
+
+    def train_step(
+        self, inputs: np.ndarray, targets: np.ndarray
+    ) -> tuple[float, list[np.ndarray], list[np.ndarray]]:
+        """Perform forward and backward passes to compute gradients.
 
         Returns:
-            float: The categorical cross-entropy loss for the current batch.
+            A tuple of (loss, grads_w, grads_b).
 
         """
         inputs = np.array(inputs, ndmin=2).T
         targets = np.array(targets, ndmin=2).T
         batch_size = inputs.shape[1]
 
-        self.t += 1
-
-        # 1.--- Forward propagation ---
-        z_steps: list[np.ndarray] = []
-        activations: list[np.ndarray] = [inputs]
-
+        # 1. Forward
         z_steps, activations = self._forward(inputs)
 
-        # 2. Error and Loss calculation
-        # Categorical Cross-Entropy for multi-class
-        predictions: np.ndarray = np.clip(
-            activations[-1], self.cfg.epsilon, 1.0 - self.cfg.epsilon
-        )
+        # 2. Loss & Initial Error
+        predictions = np.clip(activations[-1], self.cfg.epsilon, 1.0 - self.cfg.epsilon)
         loss = -np.sum(targets * np.log(predictions)) / batch_size
         errors = activations[-1] - targets
 
-        # 3. Backward propagation
-        for i in reversed(range(len(self.weights))):
-            if i == len(self.weights) - 1:
-                delta = errors
-            else:
-                # Hidden layer delta (Leaky ReLU)
-                delta = errors * self.leaky_relu_deriv(z_steps[i])
+        # 3. Backward
+        grads_w: list[np.ndarray] = [np.empty(0)] * len(self.weights)
+        grads_b: list[np.ndarray] = [np.empty(0)] * len(self.biases)
 
-            # Recalculate error for the previous layer
+        for i in reversed(range(len(self.weights))):
+            delta = (
+                errors
+                if i == len(self.weights) - 1
+                else errors * self.leaky_relu_deriv(z_steps[i])
+            )
+
             if i > 0:
                 errors = np.dot(self.weights[i].T, delta)
 
-            grad_w = np.dot(delta, activations[i].T) / batch_size
-            grad_b = np.sum(delta, axis=1, keepdims=True) / batch_size
+            grads_w[i] = np.dot(delta, activations[i].T) / batch_size
+            grads_b[i] = np.sum(delta, axis=1, keepdims=True) / batch_size
 
-            # Weights moments
-            self.m_w[i], self.v_w[i] = self._update_moments(
-                self.m_w[i], self.v_w[i], grad_w
-            )
+        return float(loss), grads_w, grads_b
 
-            # Biases moments
-            self.m_b[i], self.v_b[i] = self._update_moments(
-                self.m_b[i], self.v_b[i], grad_b
-            )
+    def get_state_dict(self) -> dict[str, np.ndarray]:
+        """Collect all trainable parameters (weights and biases) from the network.
 
-            # Bias correction and apply updates
-            self.weights[i] -= lr * self._get_adam_update(self.m_w[i], self.v_w[i])
-            self.biases[i] -= lr * self._get_adam_update(self.m_b[i], self.v_b[i])
+        Returns:
+            dict[str, np.ndarray]: A dictionary where keys are parameter names
+                (e.g., 'layer_0_W', 'layer_0_b') and values are NumPy arrays.
 
-        return float(loss)
+        """
+        state: dict[str, np.ndarray] = {}
+
+        for i in range(len(self.weights)):
+            state[f"layer_{i}_W"] = self.weights[i]
+            state[f"layer_{i}_b"] = self.biases[i]
+
+        return state
 
     def _forward(self, X: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
         """Perform a full forward pass through the network layers.
@@ -230,45 +237,3 @@ class DeepNeuralNetwork:
             activations.append(a)
 
         return z_steps, activations
-
-    def _update_moments(
-        self, m: np.ndarray, v: np.ndarray, grad: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Update ADAM first and second moments for a given gradient.
-
-        Args:
-            m (np.ndarray): Current first moment.
-            v (np.ndarray): Current second moment.
-            grad (np.ndarray): Calculated gradient for the parameter.
-
-        Returns:
-            tuple[np.ndarray, np.ndarray]: Updated (m, v) moments.
-
-        """
-        beta1 = self.cfg.beta1
-        beta2 = self.cfg.beta2
-
-        m_new = beta1 * m + (1 - beta1) * grad
-        v_new = beta2 * v + (1 - beta2) * (grad**2)
-
-        return m_new, v_new
-
-    def _get_adam_update(self, m: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Compute the ADAM gradient correction term.
-
-        Calculates bias-corrected first and second moments and returns
-        the final update component: m_hat / (sqrt(v_hat) + epsilon).
-
-        Args:
-            m (np.ndarray): The first moment vector (mean of gradients).
-            v (np.ndarray): The second moment vector (uncentered variance of gradients).
-
-        Returns:
-            np.ndarray: The computed update vector to be subtracted from
-                parameters, of the same shape as input moments.
-
-        """
-        m_hat = m / (1 - self.cfg.beta1**self.t)
-        v_hat = v / (1 - self.cfg.beta2**self.t)
-
-        return m_hat / (np.sqrt(v_hat) + self.cfg.epsilon)
