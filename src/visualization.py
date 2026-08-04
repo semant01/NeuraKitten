@@ -211,16 +211,21 @@ class VisualizerEngine:
         self.fig.canvas.start_event_loop(0.001)
 
     def _render_metrics(self, ctx: ExperimentContext) -> None:
-        """Render loss and accuracy charts on a twin-axis plot."""
+        """Render loss and accuracy charts filtered by current context epoch."""
         if not ctx.metrics:
             return
 
         self.ax_loss.clear()
         self.ax_acc.clear()
 
-        epochs = [frame.epoch for frame in ctx.metrics]
-        losses = [frame.loss for frame in ctx.metrics]
-        accuracies = [frame.accuracy for frame in ctx.metrics]
+        # Filter history to show only frames up to the current epoch
+        visible_history = [m for m in ctx.metrics if m.epoch <= ctx.epoch]
+        if not visible_history:
+            return
+
+        epochs = [frame.epoch for frame in visible_history]
+        losses = [frame.loss for frame in visible_history]
+        accuracies = [frame.accuracy for frame in visible_history]
 
         (line1,) = self.ax_loss.plot(
             epochs, losses, color="#e74c3c", label="Loss", linewidth=1.5

@@ -73,6 +73,7 @@ class NeuraConfig:
     save_to_file: bool = True
     checkpoint_interval: int = 50
     output_dir: str = "experiments"
+    time_sleep: float = 0.001  # sleep timer in replay mode
 
     # --- UI / UX / Visualization ---
     visualize: bool = True

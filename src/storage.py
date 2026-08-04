@@ -122,3 +122,29 @@ class ExperimentManager:
         # The # type: ignore is used to suppress false-positive type checker
         # errors regarding the allow_pickle parameter in savez_compressed.
         np.savez_compressed(file_path, **state)  # type: ignore[arg-type]
+
+    def load_config(self, exp_dir: Path) -> dict[str, Any]:
+        """Load configuration dictionary from a specific experiment directory."""
+        file_path = exp_dir / "config.json"
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def load_dataset(self, exp_dir: Path) -> tuple[np.ndarray, np.ndarray]:
+        """Load the dataset from a compressed NumPy file."""
+        file_path = exp_dir / "dataset.npz"
+        data = np.load(file_path)
+        return data["X"], data["y"]
+
+    def load_metrics(self, exp_dir: Path) -> list[dict[str, Any]]:
+        """Load experiment metrics history from a JSON file."""
+        file_path = exp_dir / "metrics.json"
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Assuming metrics are stored in a 'metrics' key within the saved dict
+            return data.get("metrics", [])
+
+    def load_checkpoint(self, exp_dir: Path, epoch: int) -> dict[str, np.ndarray]:
+        """Load model weights and biases for a specific epoch."""
+        file_path = exp_dir / "checkpoints" / f"epoch_{epoch:05d}.npz"
+        with np.load(file_path, allow_pickle=True) as data:
+            return {name: data[name] for name in data.files}

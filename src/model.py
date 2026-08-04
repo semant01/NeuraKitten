@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 
 from src.structures import NeuraConfig
@@ -193,21 +195,18 @@ class DeepNeuralNetwork:
 
         return float(loss), grads_w, grads_b
 
-    def get_state_dict(self) -> dict[str, np.ndarray]:
+    def get_state_dict(self) -> dict[str, Any]:
         """Collect all trainable parameters (weights and biases) from the network.
 
         Returns:
-            dict[str, np.ndarray]: A dictionary where keys are parameter names
-                (e.g., 'layer_0_W', 'layer_0_b') and values are NumPy arrays.
+            dict[str, list[np.ndarray]]: A dictionary where keys are parameter names
+                (e.g., 'weights', 'biases') and values are lists with NumPy arrays.
 
         """
-        state: dict[str, np.ndarray] = {}
-
-        for i in range(len(self.weights)):
-            state[f"layer_{i}_W"] = self.weights[i]
-            state[f"layer_{i}_b"] = self.biases[i]
-
-        return state
+        return {
+            "weights": np.array(self.weights, dtype=object),
+            "biases": np.array(self.biases, dtype=object),
+        }
 
     def _forward(self, X: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
         """Perform a full forward pass through the network layers.

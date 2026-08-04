@@ -4,6 +4,17 @@ All notable changes to the "NeuraKitten" project will be documented in this file
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.0.1-alpha] 2026-08-03
+
+### Added
+- Added `load_` methods into the `storage.py`, which required to work with the experiment directory and files for replay option.
+
+### Changed
+- Redesigned `pipeline.py` process to separate training and replay options, incorporated `_run_replay` method.
+- Adjusted _render_metrics method for replay option to render loss and accuracy charts filtered by current context epoch.
+- Other minor adjustments to comply with the new architecture.
+
+
 ## [3.0.0-alpha] 2026-05-04
 
 ### Added
